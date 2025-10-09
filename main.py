@@ -1,16 +1,31 @@
 #imports
 import pygame
+from pygame.locals import *
 import sys
+import classes
+#import math
 
 pygame.init()
+vector = pygame.math.Vector2
 
 #setup
-height = 320
-width = 240
+height = 520
+width = 340
 fps = 60
 
-display = pygame.display.set_mode((height, width))
+framepersecond = pygame.time.Clock()
+
+display = pygame.display.set_mode((width, height))
 pygame.display.set_caption("Zombies_exercise_1")
+
+#player, obstacles, enemies etc.
+Player = classes.PlayerChar()
+obstacle = classes.Platform(width, height)
+
+
+sprites = pygame.sprite.Group()
+sprites.add(Player)
+sprites.add(obstacle)
 
 #main loop
 while True:
@@ -21,4 +36,8 @@ while True:
 
     display.fill((0,0,0))
 
+    for i in sprites:
+        display.blit(i.surf, i.rect)
+
     pygame.display.update()
+    framepersecond.tick(fps)
