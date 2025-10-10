@@ -12,6 +12,8 @@ vector = pygame.math.Vector2
 height = 520
 width = 340
 fps = 60
+acceleration = 0.5
+friction = -0.1
 
 framepersecond = pygame.time.Clock()
 
@@ -40,4 +42,5 @@ while True:
         display.blit(i.surf, i.rect)
 
     pygame.display.update()
+    Player.move(acceleration, friction)
     framepersecond.tick(fps)
