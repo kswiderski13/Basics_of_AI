@@ -9,11 +9,14 @@ pygame.init()
 vector = pygame.math.Vector2
 
 #setup
-height = 520
-width = 340
+height = 960
+width = 580
 fps = 60
 acceleration = 0.5
 friction = -0.1
+
+#for shooting // not sure
+bulletVel = 0.5
 
 framepersecond = pygame.time.Clock()
 
@@ -22,7 +25,7 @@ pygame.display.set_caption("Zombies_exercise_1")
 
 #player, obstacles, enemies etc.
 Player = classes.PlayerChar()
-obstacle = classes.Platform(width, height)
+obstacle = classes.Obstacle(width, height, 50, 50)
 
 
 sprites = pygame.sprite.Group()
