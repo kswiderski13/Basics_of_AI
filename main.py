@@ -15,6 +15,11 @@ fps = 60
 acceleration = 0.5
 friction = -0.1
 
+#triangle coords
+triangle = [(10,10),
+            (30,10),
+            (20,30)]
+
 #for shooting // not sure
 bulletVel = 0.5
 
@@ -24,13 +29,13 @@ display = pygame.display.set_mode((width, height))
 pygame.display.set_caption("Zombies_exercise_1")
 
 #player, obstacles, enemies etc.
-Player = classes.PlayerChar()
-obstacle = classes.Obstacle(width, height, 50, 50)
+Player = classes.PlayerChar(display, triangle)
+obstacle = classes.Obstacle(20, 50, 50, display)
 
 
-sprites = pygame.sprite.Group()
-sprites.add(Player)
-sprites.add(obstacle)
+#sprites = pygame.sprite.Group()
+#sprites.add(Player)
+#sprites.add(obstacle)
 
 #main loop
 while True:
@@ -41,9 +46,10 @@ while True:
 
     display.fill((0,0,0))
 
-    for i in sprites:
-        display.blit(i.surf, i.rect)
-
+    # for i in sprites:
+    #     display.blit(i.surf, i.rect)
+    Player.draw()
+    obstacle.draw()
     pygame.display.update()
     Player.move(acceleration, friction)
     framepersecond.tick(fps)
