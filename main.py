@@ -4,6 +4,7 @@ from pygame.locals import *
 import sys
 import classes
 #import math
+from classes import check_collision
 
 pygame.init()
 vector = pygame.math.Vector2
@@ -51,5 +52,5 @@ while True:
     Player.draw()
     obstacle.draw()
     pygame.display.update()
-    Player.move(acceleration, friction)
+    Player.move(acceleration, friction, [obstacle])
     framepersecond.tick(fps)

@@ -11,6 +11,8 @@ class PlayerChar(object):
         self.acc = pygame.math.Vector2(0,0)
         self.vel = pygame.math.Vector2(0,0)
         self.coords = coords
+        self.collider = pygame.Rect(self.pos.x, self.pos.y, 40, 40)
+    
 
     def draw(self):
         newCoords = []
@@ -19,8 +21,9 @@ class PlayerChar(object):
             newY = p[1] + self.pos.y
             newCoords.append((newX, newY))
         pygame.draw.polygon(self.surf, (138,225,200), newCoords)
+        self.collider.topleft = (self.pos.x, self.pos.y)
 
-    def move(self, acceleration, friction):
+    def move(self, acceleration, friction, obstacles):
         self.acc = pygame.math.Vector2(0,0)
         keys = pygame.key.get_pressed()
         if keys[pygame.K_a]:
@@ -36,8 +39,15 @@ class PlayerChar(object):
         self.acc.x += self.vel.x * friction
         self.acc.y += self.vel.y * friction
         self.vel += self.acc
+        old_pos = self.pos.copy()
         self.pos += self.vel + 0.5 * self.acc
-        #self.rect.midbottom = self.pos
+        self.collider.topleft = (self.pos.x, self.pos.y)
+
+        for ob in obstacles:
+            if check_collision(self, ob):
+                self.pos = old_pos
+                self.vel = pygame.Vector2(0,0)
+                self.collider.topleft = (self.pos.x, self.pos.y)
 """
 #change to class xyz(object) and add draw() function
 class Obstacle(pygame.sprite.Sprite):
@@ -57,9 +67,14 @@ class Obstacle(object):
         self.y = posY
         self.surface = surface
         #self.color = pygame.Vector3(255,100,155)
+        self.collider = pygame.Rect(self.x - radius, self.y - radius, radius * 2, radius * 2)
 
     def draw(self):
         pygame.draw.circle(self.surface, (255, 0, 0), (self.x, self.y), self.radius)
+
+
+def check_collision(player, obstacle):
+    return player.collider.colliderect(obstacle.collider)
 
 #change to class xyz(object) and add draw() function
 class Bullet(pygame.sprite.Sprite):
