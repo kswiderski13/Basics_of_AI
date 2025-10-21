@@ -1,6 +1,8 @@
 import pygame
+from pygame.math import Vector2
+import random
 
-#class PlayerChar(pygame.sprite.Sprite):
+
 class PlayerChar(object):
     def __init__(self, surface, coords):
         super().__init__()
@@ -48,16 +50,6 @@ class PlayerChar(object):
                 self.pos = old_pos
                 self.vel = pygame.Vector2(0,0)
                 self.collider.topleft = (self.pos.x, self.pos.y)
-"""
-#change to class xyz(object) and add draw() function
-class Obstacle(pygame.sprite.Sprite):
-    def __init__(self, width, height):
-        super().__init__()
-        self.surf = pygame.Surface((20, 20))
-        self.surf.fill((255,0,0))
-        #self.rect = self.surf.get_rect(center = (width/2, height - 10))
-        self.rect = self.surf.get_rect()
-"""
 
 #obstacles //add collider
 class Obstacle(object):
@@ -87,6 +79,33 @@ class Bullet(pygame.sprite.Sprite):
         
         def instantiate():
             pass
-#to do, enemy has to be a circle // similar to obstacle i guess // add collider
-class Enemy(pygame.sprite.Sprite):
-    pass
+
+class SteeringBehaviour():
+    def __init__(self):
+        pass
+
+    def seek(self, targetPos: Vector2):
+        # DesiredVelocity = Vector2((targetPos - Enemy.pos()) * Enemy.maxSpeed()).normalize
+
+        # return (DesiredVelocity - Enemy.velocity())
+        pass
+    def flee():
+        pass
+
+    def wander():
+        pass
+
+#na podstawie ksiazki, pominalem klase BaseGameEntity, enemy ma korzystac z klasy steering behaviours
+class Enemy(object):
+    def __init__(self, pos: Vector2, radius, mass, maxSpeed, turnRate):
+        self.pos = pos
+        self.radius = radius
+        self.mass = mass
+        self.maxSpeed = maxSpeed
+        self.turnRate = turnRate
+
+"""
+    def wander(self, wRadius, wDistance, wJiter):
+        wTarget = 
+        """
+
