@@ -1,5 +1,6 @@
 #imports
 import pygame
+from pygame.math import Vector2
 from pygame.locals import *
 import sys
 import classes
@@ -32,7 +33,7 @@ pygame.display.set_caption("Zombies_exercise_1")
 #player, obstacles, enemies etc.
 Player = classes.PlayerChar(display, triangle)
 obstacle = classes.Obstacle(20, 50, 50, display)
-
+Enemy = classes.Enemy(display, Vector2(400, 200), 15, 1, 2, 5)
 
 #sprites = pygame.sprite.Group()
 #sprites.add(Player)
@@ -51,6 +52,8 @@ while True:
     #     display.blit(i.surf, i.rect)
     Player.draw()
     obstacle.draw()
-    pygame.display.update()
     Player.move(acceleration, friction, [obstacle])
+    Enemy.update(Player.pos)
+    Enemy.draw()
+    pygame.display.update()
     framepersecond.tick(fps)

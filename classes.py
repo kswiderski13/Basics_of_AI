@@ -9,9 +9,9 @@ class PlayerChar(object):
         self.surf = surface
         #self.surf.fill((138,225,200))
         #self.rect = self.surf.get_rect()
-        self.pos = pygame.math.Vector2((10, 385))
-        self.acc = pygame.math.Vector2(0,0)
-        self.vel = pygame.math.Vector2(0,0)
+        self.pos = Vector2(10, 385)
+        self.acc = Vector2(0,0)
+        self.vel = Vector2(0,0)
         self.coords = coords
         self.collider = pygame.Rect(self.pos.x, self.pos.y, 40, 40)
     
@@ -81,31 +81,35 @@ class Bullet(pygame.sprite.Sprite):
             pass
 
 class SteeringBehaviour():
-    def __init__(self):
-        pass
+    @staticmethod
+    def seek(enemy_pos: Vector2, targetPos: Vector2, maxSpeed, enemy_velocity: Vector2):
+        DesiredVelocity = Vector2((targetPos - enemy_pos) * maxSpeed).normalize()
 
-    def seek(self, targetPos: Vector2):
-        # DesiredVelocity = Vector2((targetPos - Enemy.pos()) * Enemy.maxSpeed()).normalize
-
-        # return (DesiredVelocity - Enemy.velocity())
-        pass
+        return (DesiredVelocity - enemy_velocity)
     def flee():
         pass
 
-    def wander():
+    def wander(wanderRadius, wanderDistance, wanderJiter):
         pass
 
 #na podstawie ksiazki, pominalem klase BaseGameEntity, enemy ma korzystac z klasy steering behaviours
 class Enemy(object):
-    def __init__(self, pos: Vector2, radius, mass, maxSpeed, turnRate):
+    def __init__(self, surface, pos: Vector2, radius, mass, maxSpeed, turnRate):
         self.pos = pos
+        self.surf = surface
         self.radius = radius
         self.mass = mass
+        self.vel = Vector2(0,0)
         self.maxSpeed = maxSpeed
         self.turnRate = turnRate
 
-"""
-    def wander(self, wRadius, wDistance, wJiter):
-        wTarget = 
-        """
+    def update(self, target_pos: Vector2):
+        steering = SteeringBehaviour.seek(self.pos, target_pos, self.maxSpeed, self.vel)
+        self.vel += steering /self.mass
 
+        if self.vel.length() > self.maxSpeed:
+            self.vel.scale_to_length(self.maxSpeed)
+            
+        self.pos += self.vel
+    def draw(self):
+        pygame.draw.circle(self.surf, (0, 255, 0), (self.pos.x, self.pos.y), self.radius)
