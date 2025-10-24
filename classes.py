@@ -86,9 +86,15 @@ class SteeringBehaviour():
         DesiredVelocity = Vector2((targetPos - enemy_pos) * maxSpeed).normalize()
 
         return (DesiredVelocity - enemy_velocity)
-    def flee():
-        pass
+    def flee(enemy_pos: Vector2, targetPos: Vector2, maxSpeed, enemy_velocity: Vector2):
+        panicDistance = 100 ** 2
 
+        if enemy_pos.distance_squared_to(targetPos) > panicDistance:
+            return Vector2(0,0)
+        
+        DesiredVelocity = Vector2((enemy_pos - targetPos) * maxSpeed).normalize()
+
+        return (DesiredVelocity - enemy_velocity)
     def wander(wanderRadius, wanderDistance, wanderJiter):
         pass
 
@@ -104,7 +110,7 @@ class Enemy(object):
         self.turnRate = turnRate
 
     def update(self, target_pos: Vector2):
-        steering = SteeringBehaviour.seek(self.pos, target_pos, self.maxSpeed, self.vel)
+        steering = SteeringBehaviour.flee(self.pos, target_pos, self.maxSpeed, self.vel)
         self.vel += steering /self.mass
 
         if self.vel.length() > self.maxSpeed:
