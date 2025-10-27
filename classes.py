@@ -81,6 +81,11 @@ class Bullet(pygame.sprite.Sprite):
             pass
 
 class SteeringBehaviour():
+    def __init__(self, agent=None):
+        self.agent = agent
+        self.wanderTarget = Vector2(1, 0)  # Default direction
+        self.agentVelocity = Vector2(0, 0) # Default velocity
+
     @staticmethod
     def seek(enemy_pos: Vector2, targetPos: Vector2, maxSpeed, enemy_velocity: Vector2):
         DesiredVelocity = Vector2((targetPos - enemy_pos) * maxSpeed).normalize()
@@ -110,6 +115,7 @@ class SteeringBehaviour():
     
     def wander(self, wanderRadius = 1.2, wanderDistance = 2.0, wanderJiter = 80, dt = 1/60):
         jitter = wanderJiter * dt
+        self.wanderTarget += Vector2(random.uniform(-1,1) * jitter, random.uniform(-1,1) * jitter)
         self.wanderTarget = self.wanderTarget.normalize() * wanderRadius
         circleCenter = self.agentVelocity.normalize() * wanderDistance
         target = self.agent.pos + circleCenter + self.wanderTarget
