@@ -11,7 +11,7 @@ pygame.init()
 vector = pygame.math.Vector2
 
 #setup
-height = 960
+height = 800
 width = 580
 fps = 60
 acceleration = 0.5
