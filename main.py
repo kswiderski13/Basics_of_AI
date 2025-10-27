@@ -16,6 +16,17 @@ width = 580
 fps = 60
 acceleration = 0.5
 friction = -0.1
+wall_color = (0, 100, 255)
+
+#walls
+def draw_walls(screen):                   
+    thickness = 10                        #grubość ścian
+    pygame.draw.rect(screen, wall_color, (0, 0, width, thickness)) #GÓRA
+    pygame.draw.rect(screen, wall_color, (0, height - thickness, width, thickness)) #DÓŁ
+    pygame.draw.rect(screen, wall_color, (0, 0, thickness, height)) #LEWO
+    pygame.draw.rect(screen, wall_color, (width - thickness, 0, thickness, height)) #PRAWO
+
+
 
 #triangle coords
 triangle = [(10,10),
@@ -47,6 +58,7 @@ while True:
             sys.exit()
 
     display.fill((0,0,0))
+    draw_walls(display)
 
     # for i in sprites:
     #     display.blit(i.surf, i.rect)

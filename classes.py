@@ -95,7 +95,56 @@ class SteeringBehaviour():
         DesiredVelocity = Vector2((enemy_pos - targetPos) * maxSpeed).normalize()
 
         return (DesiredVelocity - enemy_velocity)
-    def wander(wanderRadius, wanderDistance, wanderJiter):
+    
+    def arrive(self, target_pos, declaration = 1.0):
+        toTarget = target_pos - self.agent.pos
+        distance = toTarget.length()
+        if distance > 0:
+            declaration_tweaker = 0.3
+            speed = min(distance / (declaration * declaration_tweaker), self.agent.maxSpeed)
+            desiredVelocity = toTarget * (speed / distance)
+            return desiredVelocity - self.agent.velocity
+        return pygame.Vector2(0,0)
+            
+        
+    
+    def wander(self, wanderRadius = 1.2, wanderDistance = 2.0, wanderJiter = 80, dt = 1/60):
+        jitter = wanderJiter * dt
+        self.wanderTarget = self.wanderTarget.normalize() * wanderRadius
+        circleCenter = self.agentVelocity.normalize() * wanderDistance
+        target = self.agent.pos + circleCenter + self.wanderTarget
+        return target - self.agent.pos
+    
+    def pursue(self, target_agent):
+        to_target = target_agent.pos - self.agent.pos
+        relative_heading = self.agent.velocity.normalize().dot(target_agent.velocity.normalize())
+        if to_target.dot(self.agent.velocity.normalize()) > 0 and relative_heading < -0.95:
+            return self.seek(target_agent.pos)
+        look_ahead_time = to_target.length() / (self.agent.maxSpeed + target_agent.velocity.length())
+        predicted_position = target_agent.pos + target_agent.velocity * look_ahead_time
+        return self.seek(predicted_position)
+    
+    def evade(self, target_agent):
+        to_target = target_agent.pos - self.agent.pos
+        look_ahead_time = to_target.length() / (self.agent.maxSpeed + target_agent.velocity.length())
+        predicted_position = target_agent.pos + target_agent.velocity * look_ahead_time
+        return self.flee(predicted_position)
+    
+    def obsrtacle_avoidance(self, obstacles, detectionRadius = 100):
+        closest_obstacle = None
+        closest_distance = float('inf')
+        for obstacle in obstacles:
+            distance = (obstacle.pos - self.agent.pos).length() - getattr(obstacle, 'radius', 0)
+            if 0 < distance < detectionRadius and distance < closest_distance:
+                closest_obstacle = obstacle
+                closest_distance = distance
+        if closest_obstacle:
+            avoidance_force = (self.agent.pos - closest_obstacle.pos).normalize()
+            avoidence_strength = max(0, detectionRadius - closest_distance) / detectionRadius
+            steering = avoidance_force * avoidence_strength * self.agent.max_force
+            return steering
+        return pygame.Vector2(0,0)
+                
         pass
 
 #na podstawie ksiazki, pominalem klase BaseGameEntity, enemy ma korzystac z klasy steering behaviours
