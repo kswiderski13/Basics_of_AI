@@ -112,21 +112,22 @@ class SteeringBehaviour():
         return pygame.Vector2(0,0)
             
         
-    #uruchamia sie, do sprawdzenia bo dziala slabo
     #radius < distance /// wtedy jest bardziej smooth
-    @staticmethod
-    def wander(enemy_pos: Vector2, enemy_velocity: Vector2, wanderRadius = 1, wanderDistance = 5, wanderJiter = 40, dt = 1/60):
-        jitter = wanderJiter 
-        wanderTarget = Vector2(0,0)
-        wanderTarget += Vector2(random.uniform(-1,1) * jitter, random.uniform(-1,1) * jitter)
-        if wanderTarget.length() != 0:
-            wanderTarget = wanderTarget.normalize()
-        wanderTarget *= wanderRadius
+    def wander(self, wanderRadius = 50, wanderDistance = 100, wanderJitter = 40, dt = 1/60):
+        jitter = Vector2(random.uniform(-1,1) * wanderJitter * dt, random.uniform(-1,1) * wanderJitter * dt)
+        self.wanderTarget += jitter
+        if self.wanderTarget.length() != 0:
+            self.wanderTarget = self.wanderTarget.normalize()
+        #wanderTarget *= wanderRadius
         #circleCenter = enemy_velocity.normalize() * wanderDistance
         #targetWorld = enemy_pos + circleCenter + wanderTarget
-        targetLocal = wanderTarget + Vector2(wanderDistance,0)
-        target = targetLocal
-        return target
+        targetLocal = self.wanderTarget + Vector2(wanderDistance,0)
+        heading = self.agent.vel.normalize() if self.agent.vel.length() > 0 else Vector2(1, 0)
+        side = Vector2(-heading.y, heading.x)
+        targetWorld = self.agent.pos + heading * targetLocal.x + side * targetLocal.y
+        desired_velocity = (targetWorld - self.agent.pos).normalize() * self.agent.maxSpeed
+
+        return desired_velocity - self.agent.vel
     
     #idk czy potrzebne, jak boty sie zbiora to moga scigac gracza za pomoca seek
     def pursue(self, target_agent):
@@ -171,12 +172,13 @@ class Enemy(object):
         self.vel = Vector2(0,0)
         self.maxSpeed = maxSpeed
         self.turnRate = turnRate
+        self.steering = SteeringBehaviour(self)
 
     def update(self, target_pos: Vector2):
         #steering = SteeringBehaviour.seek(self.pos, target_pos, self.maxSpeed, self.vel)
         #steering = SteeringBehaviour.flee(self.pos, target_pos, self.maxSpeed, self.vel)
-        steering = SteeringBehaviour.wander(self.pos, self.vel)
-        self.vel += steering /self.mass
+        steering = self.steering.wander()
+        self.vel += steering / self.mass
 
         if self.vel.length() > self.maxSpeed:
             self.vel.scale_to_length(self.maxSpeed)
