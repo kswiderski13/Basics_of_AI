@@ -65,8 +65,8 @@ class Obstacle(object):
         pygame.draw.circle(self.surface, (255, 0, 0), (self.x, self.y), self.radius)
 
 
-def check_collision(player, obstacle):
-    return player.collider.colliderect(obstacle.collider)
+def check_collision(player, obstacles):
+    return any(player.collider.colliderect(obstacle.collider) for obstacle in obstacles)
 
 #change to class xyz(object) and add draw() function
 class Bullet(pygame.sprite.Sprite):
@@ -112,15 +112,23 @@ class SteeringBehaviour():
         return pygame.Vector2(0,0)
             
         
+    #uruchamia sie, do sprawdzenia bo dziala slabo
+    #radius < distance /// wtedy jest bardziej smooth
+    @staticmethod
+    def wander(enemy_pos: Vector2, enemy_velocity: Vector2, wanderRadius = 1, wanderDistance = 5, wanderJiter = 40, dt = 1/60):
+        jitter = wanderJiter 
+        wanderTarget = Vector2(0,0)
+        wanderTarget += Vector2(random.uniform(-1,1) * jitter, random.uniform(-1,1) * jitter)
+        if wanderTarget.length() != 0:
+            wanderTarget = wanderTarget.normalize()
+        wanderTarget *= wanderRadius
+        #circleCenter = enemy_velocity.normalize() * wanderDistance
+        #targetWorld = enemy_pos + circleCenter + wanderTarget
+        targetLocal = wanderTarget + Vector2(wanderDistance,0)
+        target = targetLocal
+        return target
     
-    def wander(self, wanderRadius = 1.2, wanderDistance = 2.0, wanderJiter = 80, dt = 1/60):
-        jitter = wanderJiter * dt
-        self.wanderTarget += Vector2(random.uniform(-1,1) * jitter, random.uniform(-1,1) * jitter)
-        self.wanderTarget = self.wanderTarget.normalize() * wanderRadius
-        circleCenter = self.agentVelocity.normalize() * wanderDistance
-        target = self.agent.pos + circleCenter + self.wanderTarget
-        return target - self.agent.pos
-    
+    #idk czy potrzebne, jak boty sie zbiora to moga scigac gracza za pomoca seek
     def pursue(self, target_agent):
         to_target = target_agent.pos - self.agent.pos
         relative_heading = self.agent.velocity.normalize().dot(target_agent.velocity.normalize())
@@ -136,7 +144,7 @@ class SteeringBehaviour():
         predicted_position = target_agent.pos + target_agent.velocity * look_ahead_time
         return self.flee(predicted_position)
     
-    def obsrtacle_avoidance(self, obstacles, detectionRadius = 100):
+    def obstacle_avoidance(self, obstacles, detectionRadius = 100):
         closest_obstacle = None
         closest_distance = float('inf')
         for obstacle in obstacles:
@@ -165,7 +173,9 @@ class Enemy(object):
         self.turnRate = turnRate
 
     def update(self, target_pos: Vector2):
-        steering = SteeringBehaviour.flee(self.pos, target_pos, self.maxSpeed, self.vel)
+        #steering = SteeringBehaviour.seek(self.pos, target_pos, self.maxSpeed, self.vel)
+        #steering = SteeringBehaviour.flee(self.pos, target_pos, self.maxSpeed, self.vel)
+        steering = SteeringBehaviour.wander(self.pos, self.vel)
         self.vel += steering /self.mass
 
         if self.vel.length() > self.maxSpeed:

@@ -43,13 +43,17 @@ pygame.display.set_caption("Zombies_exercise_1")
 
 #player, obstacles, enemies etc.
 Player = classes.PlayerChar(display, triangle)
-obstacle = classes.Obstacle(20, 50, 50, display)
-Enemy = classes.Enemy(display, Vector2(400, 200), 15, 1, 2, 5)
+obstacle1 = classes.Obstacle(20, 100, 60, display)
+obstacle2 = classes.Obstacle(20, 200, 300, display)
+obstacle3 = classes.Obstacle(20, 150, 150, display)
+Enemy1 = classes.Enemy(display, Vector2(200, 200), 15, 1, 2, 5)
+Enemy2 = classes.Enemy(display, Vector2(300, 200), 15, 1, 2, 5)
 
 #sprites = pygame.sprite.Group()
 #sprites.add(Player)
 #sprites.add(obstacle)
-
+enemies = pygame.sprite.Group()
+enemies.add()
 #main loop
 while True:
     for event in pygame.event.get():
@@ -63,9 +67,16 @@ while True:
     # for i in sprites:
     #     display.blit(i.surf, i.rect)
     Player.draw()
-    obstacle.draw()
-    Player.move(acceleration, friction, [obstacle])
-    Enemy.update(Player.pos)
-    Enemy.draw()
+    obstacle1.draw()
+    obstacle2.draw()
+    obstacle3.draw()
+    obstacles = [obstacle1, obstacle2, obstacle3]
+    Player.move(acceleration, friction, [obstacles])
+    #do przerobienia 
+    Enemy1.update(Player.pos)
+    Enemy1.draw()
+    Enemy2.update(Player.pos)
+    Enemy2.draw()
+    #
     pygame.display.update()
     framepersecond.tick(fps)
