@@ -1,7 +1,7 @@
 import pygame
 from pygame.math import Vector2
 import random
-
+import math
 
 class PlayerChar(object):
     def __init__(self, surface, coords):
@@ -15,10 +15,9 @@ class PlayerChar(object):
         self.coords = coords
         self.collider = pygame.Rect(self.pos.x, self.pos.y, 40, 40)
     
-
     def draw(self):
         newCoords = []
-        for p in self. coords:
+        for p in self.coords:
             newX = p[0] + self.pos.x
             newY = p[1] + self.pos.y
             newCoords.append((newX, newY))
@@ -37,7 +36,7 @@ class PlayerChar(object):
         if keys[pygame.K_s]:
             self.acc.y = acceleration
         #if keys[pygame.K_SPACE]:
-         #   Bullet.shoot()
+        #   Bullet.shoot()
         self.acc.x += self.vel.x * friction
         self.acc.y += self.vel.y * friction
         self.vel += self.acc
@@ -62,11 +61,17 @@ class Obstacle(object):
         self.collider = pygame.Rect(self.x - radius, self.y - radius, radius * 2, radius * 2)
 
     def draw(self):
-        pygame.draw.circle(self.surface, (255, 0, 0), (self.x, self.y), self.radius)
+        pygame.draw.circle(self.surface, (255, 0, 0), (int(self.x), int(self.y)), self.radius)
 
-
-def check_collision(player, obstacles):
-    return any(player.collider.colliderect(obstacle.collider) for obstacle in obstacles)
+def check_collision(player, obstacle_or_iterable):
+    # jeśli przekazano pojedynczy obstacle (ma atrybut collider), sprawdzamy bezpośrednio
+    if hasattr(obstacle_or_iterable, "collider"):
+        return player.collider.colliderect(obstacle_or_iterable.collider)
+    # jeżeli przekazano iterowalny zbiór przeszkód, sprawdzamy każdy element
+    try:
+        return any(player.collider.colliderect(ob.collider) for ob in obstacle_or_iterable)
+    except Exception:
+        return False
 
 #change to class xyz(object) and add draw() function
 class Bullet(pygame.sprite.Sprite):
@@ -84,22 +89,31 @@ class SteeringBehaviour():
     def __init__(self, agent=None):
         self.agent = agent
         self.wanderTarget = Vector2(1, 0)  # Default direction
-        self.agentVelocity = Vector2(0, 0) # Default velocity
+        #self.agentVelocity = Vector2(0, 0) # Default velocity
+        self.max_force = getattr(agent, 'max_force', 200.0)
 
-    @staticmethod
-    def seek(enemy_pos: Vector2, targetPos: Vector2, maxSpeed, enemy_velocity: Vector2):
-        DesiredVelocity = Vector2((targetPos - enemy_pos) * maxSpeed).normalize()
+    def _vector_truncate(self, v: Vector2, max_value: float):
+        if v.length() > max_value:
+            v = v.normalize() * max_value
+        return v
 
-        return (DesiredVelocity - enemy_velocity)
-    def flee(enemy_pos: Vector2, targetPos: Vector2, maxSpeed, enemy_velocity: Vector2):
-        panicDistance = 100 ** 2
+   # @staticmethod
+    def seek(self, target_pos: Vector2):
+        desired = (target_pos - self.agent.pos)
+        if desired.length() > 0:
+            desired = desired.normalize() * self.agent.maxSpeed
+        return desired - self.agent.vel
 
-        if enemy_pos.distance_squared_to(targetPos) > panicDistance:
+
+
+    def flee(self, target_pos: Vector2, panic_distance_sq = 100**2):
+        if self.agent.pos.distance_squared_to(target_pos) > panic_distance_sq:
             return Vector2(0,0)
-        
-        DesiredVelocity = Vector2((enemy_pos - targetPos) * maxSpeed).normalize()
+        desired = (self.agent.pos - target_pos)
+        if desired.length() > 0:
+            desired = desired.normalize() * self.agent.maxSpeed
+        return desired - self.agent.vel
 
-        return (DesiredVelocity - enemy_velocity)
     
     def arrive(self, target_pos, declaration = 1.0):
         toTarget = target_pos - self.agent.pos
@@ -111,54 +125,85 @@ class SteeringBehaviour():
             return desiredVelocity - self.agent.velocity
         return pygame.Vector2(0,0)
             
-        
     #radius < distance /// wtedy jest bardziej smooth
-    def wander(self, wanderRadius = 50, wanderDistance = 100, wanderJitter = 40, dt = 1/60):
+    def wander(self, wanderRadius = 50.0, wanderDistance = 100.0, wanderJitter = 40.0, dt = 1/60.0):
+
         jitter = Vector2(random.uniform(-1,1) * wanderJitter * dt, random.uniform(-1,1) * wanderJitter * dt)
         self.wanderTarget += jitter
-        if self.wanderTarget.length() != 0:
-            self.wanderTarget = self.wanderTarget.normalize()
-        #wanderTarget *= wanderRadius
-        #circleCenter = enemy_velocity.normalize() * wanderDistance
-        #targetWorld = enemy_pos + circleCenter + wanderTarget
-        targetLocal = self.wanderTarget + Vector2(wanderDistance,0)
-        heading = self.agent.vel.normalize() if self.agent.vel.length() > 0 else Vector2(1, 0)
+        if self.wanderTarget.length() == 0:
+            self.wanderTarget = Vector2(1, 0)
+        self.wanderTarget = self.wanderTarget.normalize() * wanderRadius
+        targetLocal = self.wanderTarget + Vector2(wanderDistance, 0)
+        if self.agent.vel.length() > 0:
+            heading = self.agent.vel.normalize()
+        else:
+            heading = Vector2(random.uniform(-1,1), random.uniform(-1,1)).normalize()
         side = Vector2(-heading.y, heading.x)
         targetWorld = self.agent.pos + heading * targetLocal.x + side * targetLocal.y
-        desired_velocity = (targetWorld - self.agent.pos).normalize() * self.agent.maxSpeed
-
+        desired_velocity = (targetWorld - self.agent.pos)
+        if desired_velocity.length() > 0:
+            desired_velocity = desired_velocity.normalize() * self.agent.maxSpeed
         return desired_velocity - self.agent.vel
     
     #idk czy potrzebne, jak boty sie zbiora to moga scigac gracza za pomoca seek
     def pursue(self, target_agent):
+        target_vel = getattr(target_agent, 'vel', getattr(target_agent, 'velocity', Vector2(0,0)))
         to_target = target_agent.pos - self.agent.pos
-        relative_heading = self.agent.velocity.normalize().dot(target_agent.velocity.normalize())
-        if to_target.dot(self.agent.velocity.normalize()) > 0 and relative_heading < -0.95:
+        if self.agent.vel.length() > 0 and target_vel.length() > 0:
+            relative_heading = self.agent.vel.normalize().dot(target_vel.normalize())
+        else:
+            relative_heading = 0.0
+        if self.agent.vel.length() > 0 and to_target.dot(self.agent.vel.normalize()) > 0 and relative_heading < -0.95:
             return self.seek(target_agent.pos)
-        look_ahead_time = to_target.length() / (self.agent.maxSpeed + target_agent.velocity.length())
-        predicted_position = target_agent.pos + target_agent.velocity * look_ahead_time
-        return self.seek(predicted_position)
-    
+        denom = (self.agent.maxSpeed + target_vel.length())
+        look_ahead_time = to_target.length() / denom if denom != 0 else 0.0
+        future_pos = target_agent.pos + target_vel * look_ahead_time
+        return self.seek(future_pos)
+
+
     def evade(self, target_agent):
+        target_vel = getattr(target_agent, 'vel', getattr(target_agent, 'velocity', Vector2(0,0)))
         to_target = target_agent.pos - self.agent.pos
-        look_ahead_time = to_target.length() / (self.agent.maxSpeed + target_agent.velocity.length())
-        predicted_position = target_agent.pos + target_agent.velocity * look_ahead_time
-        return self.flee(predicted_position)
+        denom = (self.agent.maxSpeed + target_vel.length())
+        look_ahead_time = to_target.length() / denom if denom != 0 else 0.0
+        future_pos = target_agent.pos + target_vel * look_ahead_time
+        return self.flee(future_pos)
+
     
     def obstacle_avoidance(self, obstacles, detectionRadius = 100):
-        closest_obstacle = None
-        closest_distance = float('inf')
-        for obstacle in obstacles:
-            distance = (obstacle.pos - self.agent.pos).length() - getattr(obstacle, 'radius', 0)
-            if 0 < distance < detectionRadius and distance < closest_distance:
-                closest_obstacle = obstacle
-                closest_distance = distance
-        if closest_obstacle:
-            avoidance_force = (self.agent.pos - closest_obstacle.pos).normalize()
-            avoidence_strength = max(0, detectionRadius - closest_distance) / detectionRadius
-            steering = avoidance_force * avoidence_strength * self.agent.max_force
+        feeler_lengths = [detectionRadius, detectionRadius * 0.6, detectionRadius * 0.3]
+        heading = self.agent.vel.normalize() if self.agent.vel.length() > 0 else Vector2(1,0)
+        side = Vector2(-heading.y, heading.x)
+        agent_pos = self.agent.pos
+        closest_ob = None
+        closest_dist = float('inf')
+        closest_point = None
+
+        for feeler in feeler_lengths:
+            feeler_end = agent_pos + heading * feeler
+            for ob in obstacles:
+                ob_pos = Vector2(getattr(ob, 'x', 0), getattr(ob, 'y', 0))
+                r = getattr(ob, 'radius', 0)
+                to_circle = ob_pos - agent_pos
+                proj = to_circle.dot(heading)
+                if proj <= 0:
+                    continue
+                closest = agent_pos + heading * proj
+                dist_to_circle = (ob_pos - closest).length()
+                if dist_to_circle < r and proj < closest_dist:
+                    closest_dist = proj
+                    closest_ob = ob
+                    closest_point = closest
+
+        if closest_ob is not None and closest_point is not None:
+            ob_pos = Vector2(getattr(closest_ob, 'x', 0), getattr(closest_ob, 'y', 0))
+            avoidance_dir = (self.agent.pos - ob_pos)
+            if avoidance_dir.length() > 0:
+                avoidance_dir = avoidance_dir.normalize()
+            strength = max(0.0, (detectionRadius - closest_dist) / detectionRadius)
+            steering = avoidance_dir * strength * self.max_force
             return steering
-        return pygame.Vector2(0,0)
+        return Vector2(0,0)
                 
         pass
 
@@ -173,16 +218,129 @@ class Enemy(object):
         self.maxSpeed = maxSpeed
         self.turnRate = turnRate
         self.steering = SteeringBehaviour(self)
+        self.state = "wander"
+        self.locked = False
+        self.group_id = None
+        self.last_state_change = 0.0
+        self.max_force = 500.0
+        if self.vel.length() < 0.01:
+            self.vel = Vector2(random.uniform(-0.1,0.1), random.uniform(-0.1,0.1))
+        self.hp = getattr(self, 'hp', 0)
 
-    def update(self, target_pos: Vector2):
-        #steering = SteeringBehaviour.seek(self.pos, target_pos, self.maxSpeed, self.vel)
-        #steering = SteeringBehaviour.flee(self.pos, target_pos, self.maxSpeed, self.vel)
-        steering = self.steering.wander()
-        self.vel += steering / self.mass
+    def _neighbors(self, enemies, radius=None):
+        if radius is None:
+            radius = self.CLUSTER_RADIUS if hasattr(self, 'CLUSTER_RADIUS') else 80.0
+        n = []
+        for e in enemies:
+            if e is self:
+                continue
+            if (e.pos - self.pos).length() <= radius:
+                n.append(e)
+        return n
+
+    def _find_group(self, enemies):
+        visited = set()
+        to_visit = [self]
+        group = []
+        while to_visit:
+            cur = to_visit.pop()
+            if cur in visited:
+                continue
+            visited.add(cur)
+            if getattr(cur, 'locked', False):
+                continue
+            group.append(cur)
+            for nb in cur._neighbors(enemies):
+                if nb not in visited and not getattr(nb, 'locked', False):
+                    to_visit.append(nb)
+        return group
+
+    def _lock_group(self, group, now_time):
+        gid = int(now_time * 1000)
+        for e in group:
+            e.locked = True
+            e.group_id = gid
+            e.state = "attack"
+            e.last_state_change = now_time
+
+    def _unlock_group(self, group):
+        for e in group:
+            e.locked = False
+            e.group_id = None
+            e.state = "wander"
+
+    def update(self, player, enemies, obstacles, dt, now):
+        if not getattr(self, 'locked', False):
+            group = self._find_group(enemies)
+            if len(group) >= getattr(self, 'MIN_GROUP_SIZE', 4):
+                self._lock_group(group, now)
+
+        steering = Vector2(0, 0)
+
+        if getattr(self, 'locked', False):
+            if hasattr(player, "vel"):
+                steering = self.steering.pursue(player)
+            else:
+                steering = self.steering.seek(player.pos)
+            steering += self.steering.obstacle_avoidance(obstacles, detectionRadius=100)
+        else:
+            w = self.steering.wander(wanderRadius=50.0, wanderDistance=100.0, wanderJitter=40.0, dt=dt)
+            steer_obs = self.steering.obstacle_avoidance(obstacles, detectionRadius=100)
+            steering += w + steer_obs
+
+            dist_to_player = (player.pos - self.pos).length()
+            if dist_to_player < getattr(self, 'AVOID_PLAYER_DIST', 200.0):
+                flee_force = self.steering.flee(player.pos)
+                t = max(0.0, (getattr(self, 'AVOID_PLAYER_DIST', 200.0) - dist_to_player) / getattr(self, 'AVOID_PLAYER_DIST', 200.0))
+                steering += flee_force * (0.5 + 0.5 * t)
+
+            nearby = [e for e in enemies if e is not self and (e.pos - self.pos).length() <= getattr(self, 'JOIN_DISTANCE', 150.0) and not getattr(e, 'locked', False)]
+            if nearby:
+                centroid = Vector2(0, 0)
+                for nb in nearby:
+                    centroid += nb.pos
+                centroid /= len(nearby)
+                to_centroid = (centroid - self.pos)
+                if to_centroid.length() > 0:
+                    desired = to_centroid.normalize() * self.maxSpeed
+                    steering += (desired - self.vel) * 0.5
+
+        # separacja — zapobiega nachodzeniu się wrogów
+        separation_force = Vector2(0, 0)
+        sep_count = 0
+        SEPARATION_RADIUS = getattr(self, 'SEPARATION_RADIUS', 40.0)
+        SEPARATION_WEIGHT = getattr(self, 'SEPARATION_WEIGHT', 1.5)
+
+        for other in enemies:
+            if other is self:
+                continue
+            offset = self.pos - other.pos
+            dist = offset.length()
+            if 0 < dist < SEPARATION_RADIUS:
+                if dist > 0:
+                    separation_force += offset.normalize() * (SEPARATION_RADIUS - dist) / SEPARATION_RADIUS
+                else:
+                    separation_force += Vector2(random.uniform(-1,1), random.uniform(-1,1))
+                sep_count += 1
+
+        if sep_count > 0:
+            separation_force /= sep_count
+            if separation_force.length() > 0:
+                separation_force = separation_force.normalize() * self.maxSpeed - self.vel
+            steering += separation_force * SEPARATION_WEIGHT
+
+        force = steering
+        if force.length() > self.max_force:
+            force = force.normalize() * self.max_force
+
+        acceleration = force / max(1.0, self.mass)
+        self.vel += acceleration * dt
 
         if self.vel.length() > self.maxSpeed:
-            self.vel.scale_to_length(self.maxSpeed)
-            
-        self.pos += self.vel
+            self.vel = self.vel.normalize() * self.maxSpeed
+
+        self.pos += self.vel * dt
+
     def draw(self):
-        pygame.draw.circle(self.surf, (0, 255, 0), (self.pos.x, self.pos.y), self.radius)
+        color = (0, 255, 0) if not getattr(self, 'locked', False) else (200, 40, 40)
+        pygame.draw.circle(self.surf, color, (int(self.pos.x), int(self.pos.y)), self.radius)
