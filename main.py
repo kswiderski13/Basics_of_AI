@@ -104,6 +104,7 @@ Enemy8 = classes.Enemy(display, Vector2(320, 320), 15, 1, 120, 5)
 #sprites.add(Player)
 #sprites.add(obstacle)
 enemies = [Enemy1, Enemy2, Enemy3, Enemy4, Enemy5, Enemy6, Enemy7, Enemy8]
+#enemies = [Enemy1]
 
 #main loop
 while True:

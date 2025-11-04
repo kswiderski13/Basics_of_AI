@@ -111,7 +111,7 @@ class SteeringBehaviour():
             return Vector2(0,0)
         desired = (self.agent.pos - target_pos)
         if desired.length() > 0:
-            desired = desired.normalize() * self.agent.maxSpeed
+            desired = desired.normalize() * self.agent.maxSpeed + Vector2(10,10)
         return desired - self.agent.vel
 
     
@@ -178,7 +178,8 @@ class SteeringBehaviour():
         closest_ob = None
         closest_dist = float('inf')
         closest_point = None
-
+        agent_radius = getattr(self.agent, 'radius', 0)
+        buffer = getattr(self, 'OBSTACLE_BUFFER', 10) + agent_radius
         for feeler in feeler_lengths:
             feeler_end = agent_pos + heading * feeler
             for ob in obstacles:
@@ -186,11 +187,12 @@ class SteeringBehaviour():
                 r = getattr(ob, 'radius', 0)
                 to_circle = ob_pos - agent_pos
                 proj = to_circle.dot(heading)
-                if proj <= 0:
+                if proj <= 0 or proj > feeler:
                     continue
                 closest = agent_pos + heading * proj
-                dist_to_circle = (ob_pos - closest).length()
-                if dist_to_circle < r and proj < closest_dist:
+                dist_sq = (ob_pos - closest).length_squared()
+                thresh = (r + buffer) ** 2
+                if dist_sq < thresh and proj < closest_dist:
                     closest_dist = proj
                     closest_ob = ob
                     closest_point = closest
@@ -201,11 +203,10 @@ class SteeringBehaviour():
             if avoidance_dir.length() > 0:
                 avoidance_dir = avoidance_dir.normalize()
             strength = max(0.0, (detectionRadius - closest_dist) / detectionRadius)
-            steering = avoidance_dir * strength * self.max_force
+            max_force = getattr(self.agent, 'max_force', getattr(self, 'max_force', 200.0))
+            steering = avoidance_dir * strength * max_force
             return steering
         return Vector2(0,0)
-                
-        pass
 
 #na podstawie ksiazki, pominalem klase BaseGameEntity, enemy ma korzystac z klasy steering behaviours
 class Enemy(object):
@@ -270,6 +271,14 @@ class Enemy(object):
             e.state = "wander"
 
     def update(self, player, enemies, obstacles, dt, now):
+        #function that makes lone enemies evade player if they spot him
+        if not getattr(self, 'locked', False) and self.state == "wander":
+            dist_to_player = (player.pos - self.pos).length()
+            SPOT_PLAYER_DIST = getattr(self, 'SPOT_PLAYER_DIST', 150.0)
+            if dist_to_player < SPOT_PLAYER_DIST:
+                self.state = "evade"
+                self.last_state_change = now
+
         if not getattr(self, 'locked', False):
             group = self._find_group(enemies)
             if len(group) >= getattr(self, 'MIN_GROUP_SIZE', 4):
