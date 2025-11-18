@@ -12,6 +12,7 @@ class PlayerChar(object):
         self.pos = Vector2(10, 385)
         self.acc = Vector2(0,0)
         self.vel = Vector2(0,0)
+        self.base_coords = coords
         self.coords = coords
         self.collider = pygame.Rect(self.pos.x, self.pos.y, 40, 40)
     
@@ -43,6 +44,17 @@ class PlayerChar(object):
         old_pos = self.pos.copy()
         self.pos += self.vel + 0.5 * self.acc
         self.collider.topleft = (self.pos.x, self.pos.y)
+
+        #do poprawki
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        direction = Vector2(mouse_x - (self.pos.x + 20), mouse_y - (self.pos.y + 20))
+        angle = math.degrees(math.atan2(-direction.y, direction.x))
+        rotated_coords = []
+        for p in self.base_coords:
+            rotated_x = p[0] * math.cos(math.radians(angle)) - p[1] * math.sin(math.radians(angle))
+            rotated_y = p[0] * math.sin(math.radians(angle)) + p[1] * math.cos(math.radians(angle))
+            rotated_coords.append((rotated_x, rotated_y))
+        self.coords = rotated_coords
 
         for ob in obstacles:
             if check_collision(self, ob):
