@@ -1,16 +1,15 @@
-#imports
+# imports
 import pygame
 from pygame.math import Vector2
 from pygame.locals import *
 import sys
 import classes
-#import math
-from classes import check_collision
+from classes import check_collision, resolve_wall_penetration
 
 pygame.init()
 vector = pygame.math.Vector2
 
-#setup
+# setup
 height = 800
 width = 580
 fps = 60
@@ -18,7 +17,7 @@ acceleration = 0.5
 friction = -0.1
 wall_color = (0, 100, 255)
 
-#walls
+# walls
 def draw_walls(screen):
     thickness = 10
     top = pygame.Rect(0, 0, width, thickness)
@@ -73,12 +72,12 @@ def handle_wall_collision_entity(entity, walls, thickness=10):
                     entity.pos.y = max_y
                     entity.vel.y = 0
 
-#triangle coords
+# triangle coords
 triangle = [(10,10),
             (30,10),
             (20,30)]
 
-#for shooting // not sure
+# for shooting // not sure
 bulletVel = 0.5
 
 framepersecond = pygame.time.Clock()
@@ -86,7 +85,7 @@ framepersecond = pygame.time.Clock()
 display = pygame.display.set_mode((width, height))
 pygame.display.set_caption("Zombies_exercise_1")
 
-#player, obstacles, enemies etc.
+# player, obstacles, enemies etc.
 Player = classes.PlayerChar(display, triangle)
 obstacle1 = classes.Obstacle(20, 100, 60, display)
 obstacle2 = classes.Obstacle(20, 200, 300, display)
@@ -100,18 +99,19 @@ Enemy6 = classes.Enemy(display, Vector2(100, 100), 15, 1, 120, 5)
 Enemy7 = classes.Enemy(display, Vector2(400, 250), 15, 1, 120, 5)
 Enemy8 = classes.Enemy(display, Vector2(320, 320), 15, 1, 120, 5)
 
-#sprites = pygame.sprite.Group()
-#sprites.add(Player)
-#sprites.add(obstacle)
 enemies = [Enemy1, Enemy2, Enemy3, Enemy4, Enemy5, Enemy6, Enemy7, Enemy8]
-#enemies = [Enemy1]
+bullets = []
 
-#main loop
+# main loop
 while True:
     for event in pygame.event.get():
         if event.type == QUIT:
             pygame.quit()
             sys.exit()
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            b = Player.shoot()
+            if b is not None:
+                bullets.append(b)
 
     dt = framepersecond.tick(fps) / 1000.0
     now = pygame.time.get_ticks() / 1000.0
@@ -119,19 +119,44 @@ while True:
     display.fill((0,0,0))
     walls = draw_walls(display)
 
-    # for i in sprites:
-    #     display.blit(i.surf, i.rect)
     Player.draw()
     obstacle1.draw()
     obstacle2.draw()
     obstacle3.draw()
     obstacles = [obstacle1, obstacle2, obstacle3]
     Player.move(acceleration, friction, obstacles)
-    handle_wall_collision_entity(Player, walls)
-    #do przerobienia 
-    for e in enemies:
+
+    # use the single canonical resolve function imported from classes
+    resolve_wall_penetration(Player, walls)
+
+    for e in enemies[:]:
         e.update(Player, enemies, obstacles, dt, now)
-        handle_wall_collision_entity(e, walls)
+        # ensure enemies also use the same resolve function
+        resolve_wall_penetration(e, walls)
         e.draw()
-    #
+
+    for b in bullets[:]:
+        b.update(dt)
+        b.draw(display)
+
+        hit = False
+        for e in enemies:
+            if not hasattr(e, 'hp'):
+                e.hp = getattr(e, 'hp', 1)
+            if (e.pos - b.pos).length_squared() <= (e.radius + b.radius) ** 2:
+                e.hp -= 1
+                hit = True
+                break
+        if hit:
+            try:
+                bullets.remove(b)
+            except ValueError:
+                pass
+            enemies = [en for en in enemies if getattr(en, 'hp', 1) > 0]
+            continue
+
+        if b.pos.x < -50 or b.pos.x > width + 50 or b.pos.y < -50 or b.pos.y > height + 50:
+            if b in bullets:
+                bullets.remove(b)
+
     pygame.display.update()
