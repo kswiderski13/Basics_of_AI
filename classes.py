@@ -83,6 +83,10 @@ class PlayerChar(object):
         self.pos += self.vel + 0.5 * self.acc
         self.collider.topleft = (self.pos.x, self.pos.y)
 
+        for ob in obstacles:
+            if check_collision(self, ob):
+                resolve_wall_penetration(self, [ob.collider])
+
         # obracanie w kierunku myszy
         mouse_x, mouse_y = pygame.mouse.get_pos()
         center_offset = Vector2(20, 20)
@@ -118,7 +122,6 @@ class PlayerChar(object):
         start = self.pos + nose_local
         return Bullet(start, direction)
 
-#obstacles //add collider
 class Obstacle(object):
     def __init__(self, radius, posX, posY, surface):
         self.radius = radius
@@ -126,10 +129,11 @@ class Obstacle(object):
         self.y = posY
         self.surface = surface
         #self.color = pygame.Vector3(255,100,155)
-        self.collider = pygame.Rect(self.x - radius, self.y - radius, radius * 2, radius * 2)
+        self.collider = pygame.Rect(self.x - radius, self.y - radius, radius *2, radius *2)
 
     def draw(self):
         pygame.draw.circle(self.surface, (255, 0, 0), (int(self.x), int(self.y)), self.radius)
+        self.collider.topleft = (self.x - self.radius, self.y - self.radius)
 
 def check_collision(player, obstacle_or_iterable):
     # jeśli przekazano pojedynczy obstacle (ma atrybut collider), sprawdzamy bezpośrednio
