@@ -508,5 +508,5 @@ class Enemy(object):
 
     #dodac oblokowanie grupy
     #dodac chowanie sie za przeszkodami (hide)
-    #usunac szukanie grupy co klatke
+    #usunac szukanie grupy co klatke, maja sobie losowo chodzic po mapie i chowac sie za przeszkodami
     #przerobic zeby gracz nie odpychal przeciwnikow
