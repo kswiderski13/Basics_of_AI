@@ -168,7 +168,7 @@ class Obstacle(object):
         self.collider = pygame.Rect(self.x - radius, self.y - radius, radius *2, radius *2)
 
     def draw(self):
-        pygame.draw.circle(self.surface, (255, 0, 0), (int(self.x), int(self.y)), self.radius)
+        pygame.draw.circle(self.surface, (55, 100, 180), (int(self.x), int(self.y)), self.radius)
         self.collider.topleft = (self.x - self.radius, self.y - self.radius)
 
 def check_collision(player, obstacle_or_iterable):
@@ -371,6 +371,7 @@ class Enemy(object):
                 n.append(e)
         return n
 
+    #do usuniecia / przerobienia
     def _find_group(self, enemies):
         visited = set()
         to_visit = [self]
@@ -436,9 +437,12 @@ class Enemy(object):
         if getattr(self, 'locked', False):
             if hasattr(player, "vel"):
                 steering = self.steering.pursue(player)
+                # if len(group) < getattr(self, 'MIN_GROUP_SIZE', 4):
+                #     self._unlock_group(group)
+
             else:
                 steering = self.steering.seek(player.pos)
-            steering += self.steering.obstacle_avoidance(obstacles, detectionRadius=100) * 1.5
+            steering += self.steering.obstacle_avoidance(obstacles, detectionRadius=100) * 1.5 
 
         else:
             w = self.steering.wander(wanderRadius=50.0, wanderDistance=100.0, wanderJitter=40.0, dt=dt)
@@ -501,3 +505,8 @@ class Enemy(object):
     def draw(self):
         color = (0, 255, 0) if not getattr(self, 'locked', False) else (200, 40, 40)
         pygame.draw.circle(self.surf, color, (int(self.pos.x), int(self.pos.y)), self.radius)
+
+    #dodac oblokowanie grupy
+    #dodac chowanie sie za przeszkodami (hide)
+    #usunac szukanie grupy co klatke
+    #przerobic zeby gracz nie odpychal przeciwnikow
