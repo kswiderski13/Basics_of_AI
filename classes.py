@@ -107,7 +107,7 @@ class PlayerChar(object):
         direction = Vector2(mouse_x, mouse_y) - (self.pos + Vector2(20, 20))
         if direction.length_squared() == 0:
             return None
-        # znajdź wierzchołek trójkąta najdalej w kierunku strzału (projekcja)
+        
         heading = direction.normalize()
         best_proj = -float('inf')
         nose_local = None
@@ -121,6 +121,42 @@ class PlayerChar(object):
             nose_local = Vector2(20, 20)
         start = self.pos + nose_local
         return Bullet(start, direction)
+
+    # def shoot_ray(self, enemies):
+    #     mouse_x, mouse_y = pygame.mouse.get_pos()
+    #     start = self.pos + Vector2(20, 20)
+    #     end = Vector2(mouse_x, mouse_y)
+        
+    #     ray_dir = (end - start)
+    #     if ray_dir.length() == 0:
+    #         return None
+    #     ray_dir = ray_dir.normalize()
+
+    #     max_dist = 2000
+    #     closest_enemy = None
+    #     closest_dist = float('inf') #nieskonczonosc
+
+    #     for e in enemies:
+    #         to_enemy = e.pos - start
+    #         proj_length = to_enemy.dot(ray_dir)
+
+    #         # jeśli wróg jest za graczem lub dalej niż zasięg promienia
+    #         if proj_length < 0 or proj_length > max_dist:
+    #             continue
+
+    #         closest_point = start + ray_dir * proj_length
+    #         dist_to_enemy = (closest_point - e.pos).length()
+
+    #         if dist_to_enemy <= e.radius:
+    #             if proj_length < closest_dist:
+    #                 closest_dist = proj_length
+    #                 closest_enemy = e
+
+    #     if closest_enemy:
+    #         closest_enemy.hp -= 1
+
+    #     return end
+
 
 class Obstacle(object):
     def __init__(self, radius, posX, posY, surface):
@@ -136,10 +172,10 @@ class Obstacle(object):
         self.collider.topleft = (self.x - self.radius, self.y - self.radius)
 
 def check_collision(player, obstacle_or_iterable):
-    # jeśli przekazano pojedynczy obstacle (ma atrybut collider), sprawdzamy bezpośrednio
+    #jeśli przekazano pojedynczy obstacle (ma atrybut collider), sprawdzany bezpośrednio
     if hasattr(obstacle_or_iterable, "collider"):
         return player.collider.colliderect(obstacle_or_iterable.collider)
-    # jeżeli przekazano iterowalny zbiór przeszkód, sprawdzamy każdy element
+    #jeżeli przekazano iterowalny zbiór przeszkód, sprawdzamy każdy element
     try:
         return any(player.collider.colliderect(ob.collider) for ob in obstacle_or_iterable)
     except Exception:

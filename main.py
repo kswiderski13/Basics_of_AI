@@ -5,6 +5,7 @@ from pygame.locals import *
 import sys
 import classes
 from classes import check_collision, resolve_wall_penetration
+import random
 
 pygame.init()
 vector = pygame.math.Vector2
@@ -90,17 +91,40 @@ Player = classes.PlayerChar(display, triangle)
 obstacle1 = classes.Obstacle(20, 100, 60, display)
 obstacle2 = classes.Obstacle(20, 200, 300, display)
 obstacle3 = classes.Obstacle(20, 150, 150, display)
-Enemy1 = classes.Enemy(display, Vector2(200, 200), 15, 1, 120, 5)
-Enemy2 = classes.Enemy(display, Vector2(300, 200), 15, 1, 120, 5)
-Enemy3 = classes.Enemy(display, Vector2(250, 300), 15, 1, 120, 5)
-Enemy4 = classes.Enemy(display, Vector2(150, 250), 15, 1, 120, 5)
-Enemy5 = classes.Enemy(display, Vector2(350, 150), 15, 1, 120, 5)
-Enemy6 = classes.Enemy(display, Vector2(100, 100), 15, 1, 120, 5)
-Enemy7 = classes.Enemy(display, Vector2(400, 250), 15, 1, 120, 5)
-Enemy8 = classes.Enemy(display, Vector2(320, 320), 15, 1, 120, 5)
+# Enemy1 = classes.Enemy(display, Vector2(200, 200), 15, 1, 120, 5)
+# Enemy2 = classes.Enemy(display, Vector2(300, 200), 15, 1, 120, 5)
+# Enemy3 = classes.Enemy(display, Vector2(250, 300), 15, 1, 120, 5)
+# Enemy4 = classes.Enemy(display, Vector2(150, 250), 15, 1, 120, 5)
+# Enemy5 = classes.Enemy(display, Vector2(350, 150), 15, 1, 120, 5)
+# Enemy6 = classes.Enemy(display, Vector2(100, 100), 15, 1, 120, 5)
+# Enemy7 = classes.Enemy(display, Vector2(400, 250), 15, 1, 120, 5)
+# Enemy8 = classes.Enemy(display, Vector2(320, 320), 15, 1, 120, 5)
 
-enemies = [Enemy1, Enemy2, Enemy3, Enemy4, Enemy5, Enemy6, Enemy7, Enemy8]
+#enemies = [Enemy1, Enemy2, Enemy3, Enemy4, Enemy5, Enemy6, Enemy7, Enemy8]
 bullets = []
+enemies = []
+enemies_num = 8
+# obstacles = []  
+# obstacles = obstacles + enemies  
+# obstacles_num = 5
+
+# for _ in range(obstacles_num):
+#     w = random.randint(40, 120)
+#     h = random.randint(40, 120)
+#     x = random.randint(20, width - w - 20)
+#     y = random.randint(20, height - h - 20)
+#     obstacles.append(classes.Obstacle(w, h, x, display))
+
+for _ in range(enemies_num):
+    pos = Vector2(
+        random.randint(50, width - 50),
+        random.randint(50, height - 50)
+    )
+    r = 15
+    speed = 1
+    view = 120
+    dmg = 5
+    enemies.append(classes.Enemy(display, pos, r, speed, view, dmg))
 
 # main loop
 while True:
@@ -124,14 +148,14 @@ while True:
     obstacle2.draw()
     obstacle3.draw()
     obstacles = [obstacle1, obstacle2, obstacle3]
+    # for o in obstacles:
+    #     o.draw()
     Player.move(acceleration, friction, obstacles)
 
-    # use the single canonical resolve function imported from classes
     resolve_wall_penetration(Player, walls)
 
     for e in enemies[:]:
         e.update(Player, enemies, obstacles, dt, now)
-        # ensure enemies also use the same resolve function
         resolve_wall_penetration(e, walls)
         e.draw()
 
