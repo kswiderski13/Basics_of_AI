@@ -273,6 +273,33 @@ class SteeringBehaviour():
         look_ahead_time = to_target.length() / denom if denom != 0 else 0.0
         future_pos = target_agent.pos + target_vel * look_ahead_time
         return self.flee(future_pos)
+    
+    def gethidingposition(self, posOb: Vector2, radiusOb, posTarget: Vector2):
+        distancefromBoundary = 30
+        distAway = radiusOb + distancefromBoundary
+
+        toOb = Vector2(posOb - posTarget).normalize()
+        return toOb * distAway + posOb
+    
+    def hide(self, target_agent, obstacles):
+        closest_dist = float('inf')
+        best_hiding_spot = None
+
+        for ob in obstacles:
+            if hasattr(ob, "radius"):
+                ob_pos = Vector2(ob.x, ob.y)
+                hiding_spot = self.get_hiding_position(ob_pos, ob.radius, target_agent.pos)
+
+                dist = (hiding_spot - self.agent.pos).length_squared()
+
+                if dist < closest_dist:
+                    closest_dist = dist
+                    best_hiding_spot = hiding_spot
+
+        if best_hiding_spot is None:
+            return self.evade(target_agent)
+
+        return self.arrive(best_hiding_spot)
 
     def obstacle_avoidance(self, obstacles, detectionRadius = 100):
         feeler_lengths = [detectionRadius, detectionRadius * 0.6, detectionRadius * 0.3]
@@ -420,12 +447,19 @@ class Enemy(object):
             self._stuck_timer = 0.0
 
         #function that makes lone enemies evade player if they spot him
-        if not getattr(self, 'locked', False) and self.state == "wander":
+        if not getattr(self, 'locked', False):
             dist_to_player = (player.pos - self.pos).length()
             SPOT_PLAYER_DIST = getattr(self, 'SPOT_PLAYER_DIST', 150.0)
-            if dist_to_player < SPOT_PLAYER_DIST:
-                self.state = "evade"
-                self.last_state_change = now
+            if self.state == "wander":
+                if dist_to_player < SPOT_PLAYER_DIST:
+                    self.state = "hide"
+                    self.last_state_change = now
+                else:
+                    self.state = "evade"
+
+            elif self.state == "hide":
+                if dist_to_player > SPOT_PLAYER_DIST * 1.5:
+                    self.state = "wander"
 
         if not getattr(self, 'locked', False):
             group = self._find_group(enemies)
@@ -437,23 +471,27 @@ class Enemy(object):
         if getattr(self, 'locked', False):
             if hasattr(player, "vel"):
                 steering = self.steering.pursue(player)
+              #  steering += self.steering.obstacle_avoidance(obstacles, detectionRadius=100) * 1.5
                 # if len(group) < getattr(self, 'MIN_GROUP_SIZE', 4):
                 #     self._unlock_group(group)
 
+            elif self.state == "hide":
+                steering = self.steering.hide(player, obstacles)
+             #   steering += self.steering.obstacle_avoidance(obstacles, detectionRadius=100) * 1.5
             else:
                 steering = self.steering.seek(player.pos)
-            steering += self.steering.obstacle_avoidance(obstacles, detectionRadius=100) * 1.5 
+            #steering += self.steering.obstacle_avoidance(obstacles, detectionRadius=100) * 1.5 
 
         else:
             w = self.steering.wander(wanderRadius=50.0, wanderDistance=100.0, wanderJitter=40.0, dt=dt)
             steer_obs = self.steering.obstacle_avoidance(obstacles, detectionRadius=100) * 1.5
             steering += w + steer_obs
 
-            dist_to_player = (player.pos - self.pos).length()
-            if dist_to_player < getattr(self, 'AVOID_PLAYER_DIST', 200.0):
-                flee_force = self.steering.flee(player.pos)
-                t = max(0.0, (getattr(self, 'AVOID_PLAYER_DIST', 200.0) - dist_to_player) / getattr(self, 'AVOID_PLAYER_DIST', 200.0))
-                steering += flee_force * (0.5 + 0.5 * t)
+            # dist_to_player = (player.pos - self.pos).length()
+            # if dist_to_player < getattr(self, 'AVOID_PLAYER_DIST', 200.0):
+            #     flee_force = self.steering.flee(player.pos)
+            #     t = max(0.0, (getattr(self, 'AVOID_PLAYER_DIST', 200.0) - dist_to_player) / getattr(self, 'AVOID_PLAYER_DIST', 200.0))
+            #     steering += flee_force * (0.5 + 0.5 * t)
 
             nearby = [e for e in enemies if e is not self and (e.pos - self.pos).length() <= getattr(self, 'JOIN_DISTANCE', 150.0) and not getattr(e, 'locked', False)]
             if nearby:
