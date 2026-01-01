@@ -8,7 +8,7 @@ import classes2
 pygame.init()
 vector = pygame.math.Vector2
 
-#setup
+# setup
 height = 800
 width = 580
 fps = 60
@@ -16,7 +16,7 @@ acceleration = 0.5
 friction = -0.1
 wall_color = (0, 100, 255)
 
-#walls
+# walls
 def draw_walls(screen):
     thickness = 10
     top = pygame.Rect(0, 0, width, thickness)
@@ -71,53 +71,42 @@ def handle_wall_collision_entity(entity, walls, thickness=10):
                     entity.pos.y = max_y
                     entity.vel.y = 0
 
-#triangle coords (player)
-triangle = [
-    (10, 10),
-    (30, 10),
-    (20, 30)
-]
-
 framepersecond = pygame.time.Clock()
 
 display = pygame.display.set_mode((width, height))
 pygame.display.set_caption("DM_exercise_2")
 
-#player and obstacles
-Player = classes2.PlayerChar(display, triangle)
-
+# obstacles
 obstacle1 = classes2.Obstacle(20, 100, 60, display)
 obstacle2 = classes2.Obstacle(20, 200, 300, display)
 obstacle3 = classes2.Obstacle(20, 150, 150, display)
 obstacles = [obstacle1, obstacle2, obstacle3]
 
-bullets = []
+MAP_RECT = pygame.Rect(0, 0, width, height)
+BOT_RADIUS = 15
 
-#main loop
+nav_graph = classes2.build_nav_graph_flood_fill(
+    start_pos=Vector2(50, 50),   # dowolny punkt startowy
+    obstacles=obstacles,
+    map_rect=MAP_RECT,
+    bot_radius=BOT_RADIUS
+)
+
+# main loop
 while True:
     for event in pygame.event.get():
         if event.type == QUIT:
             pygame.quit()
             sys.exit()
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            b = Player.shoot()
-            if b is not None:
-                bullets.append(b)
 
     dt = framepersecond.tick(fps) / 1000.0
 
     display.fill((0, 0, 0))
     walls = draw_walls(display)
 
-    Player.draw()
     for o in obstacles:
         o.draw()
 
-    Player.move(acceleration, friction, obstacles)
-    classes2.resolve_wall_penetration(Player, walls)
-
-    for b in bullets[:]:
-        b.update(dt)
-        b.draw(display)
+    classes2.draw_nav_graph(display, nav_graph)
 
     pygame.display.update()

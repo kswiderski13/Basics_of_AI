@@ -1,6 +1,7 @@
 import pygame
 from pygame.math import Vector2
 import math
+from collections import deque
 
 
 def resolve_wall_penetration(entity, walls):
@@ -179,3 +180,84 @@ class Bullet:
             (int(self.pos.x), int(self.pos.y)),
             self.radius
         )
+
+class NavigationNode:
+    def __init__(self, position: Vector2):
+        self.position = Vector2(position)
+        self.neighbors = []
+
+    bot_radius = 15
+    step = bot_radius
+
+def can_place_bot(pos: Vector2, obstacles, map_rect, radius: float) -> bool:
+    if pos.x - radius < map_rect.left:
+        return False
+    if pos.x + radius > map_rect.right:
+        return False
+    if pos.y - radius < map_rect.top:
+         return False
+    if pos.y + radius > map_rect.bottom:
+        return False
+    for ob in obstacles:
+        d_sq = (Vector2(ob.x, ob.y) - pos).length_squared()
+        if d_sq < (radius + ob.radius) ** 2:
+            return False
+
+    return True
+        
+
+
+def build_nav_graph_flood_fill(start_pos: Vector2, obstacles, map_rect: pygame.Rect,bot_radius: float) -> dict[tuple[int, int], NavigationNode]:
+    step = bot_radius
+    nodes: dict[tuple[int, int], NavigationNode] = {}
+    queue = deque()
+
+    start = Vector2(start_pos)
+    if not can_place_bot(start, obstacles, map_rect, bot_radius):
+        return nodes
+
+    key = (int(start.x), int(start.y))
+    nodes[key] = NavigationNode(start)
+    queue.append(start)
+
+    directions = [
+        Vector2(1, 0), Vector2(-1, 0),
+        Vector2(0, 1), Vector2(0, -1),
+        Vector2(1, 1), Vector2(-1, 1),
+        Vector2(1, -1), Vector2(-1, -1)
+    ]
+
+    while queue:
+        current = queue.popleft()
+        current_key = (int(current.x), int(current.y))
+        current_node = nodes[current_key]
+
+        for d in directions:
+            new_pos = current + d * step
+            new_key = (int(new_pos.x), int(new_pos.y))
+
+            if new_key in nodes:
+                continue
+
+            if not can_place_bot(new_pos, obstacles, map_rect, bot_radius):
+                continue
+
+            new_node = NavigationNode(new_pos)
+            nodes[new_key] = new_node
+
+            # połączenia dwukierunkowe
+            current_node.neighbors.append(new_node)
+            new_node.neighbors.append(current_node)
+
+            queue.append(new_pos)
+
+    return nodes
+
+
+def draw_nav_graph(surface, nav_nodes):
+    for node in nav_nodes.values():
+        pygame.draw.circle(surface, (0, 180, 0), node.position, 2)
+        for n in node.neighbors:
+            pygame.draw.line(surface, (0, 90, 0), node.position, n.position, 1)
+
+
