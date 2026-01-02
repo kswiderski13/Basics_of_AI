@@ -4,6 +4,7 @@ from pygame.math import Vector2
 from pygame.locals import *
 import sys
 import classes2
+from classes2 import dummybot
 
 pygame.init()
 vector = pygame.math.Vector2
@@ -82,16 +83,24 @@ obstacle2 = classes2.Obstacle(20, 200, 300, display)
 obstacle3 = classes2.Obstacle(20, 150, 150, display)
 obstacles = [obstacle1, obstacle2, obstacle3]
 
+#bots
+bot1 = dummybot(Vector2(100, 100), display)
+
+
 MAP_RECT = pygame.Rect(0, 0, width, height)
 BOT_RADIUS = 15
 
 nav_graph = classes2.build_nav_graph_flood_fill(
-    start_pos=Vector2(50, 50),   # dowolny punkt startowy
+    start_pos=Vector2(50, 50),   #dowolny punkt startowy
     obstacles=obstacles,
     map_rect=MAP_RECT,
     bot_radius=BOT_RADIUS
 )
 
+planner = classes2.PathPlanner(bot1, nav_graph)
+
+path = []
+bot1.set_path(path)
 # main loop
 while True:
     for event in pygame.event.get():
@@ -108,5 +117,7 @@ while True:
         o.draw()
 
     classes2.draw_nav_graph(display, nav_graph)
+    bot1.update(dt)
+    bot1.draw(display)
 
     pygame.display.update()

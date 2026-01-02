@@ -46,83 +46,83 @@ def resolve_wall_penetration(entity, walls):
                 entity._stuck_timer = 0.0
 
 
-class PlayerChar(object):
-    def __init__(self, surface, coords):
-        super().__init__()
-        self.surf = surface
-        self.pos = Vector2(10, 385)
-        self.acc = Vector2(0, 0)
-        self.vel = Vector2(0, 0)
-        self.base_coords = coords
-        self.coords = coords
-        self.collider = pygame.Rect(self.pos.x, self.pos.y, 40, 40)
+# class PlayerChar(object):
+#     def __init__(self, surface, coords):
+#         super().__init__()
+#         self.surf = surface
+#         self.pos = Vector2(10, 385)
+#         self.acc = Vector2(0, 0)
+#         self.vel = Vector2(0, 0)
+#         self.base_coords = coords
+#         self.coords = coords
+#         self.collider = pygame.Rect(self.pos.x, self.pos.y, 40, 40)
 
-    def draw(self):
-        newCoords = []
-        for p in self.coords:
-            newX = p[0] + self.pos.x
-            newY = p[1] + self.pos.y
-            newCoords.append((newX, newY))
-        pygame.draw.polygon(self.surf, (138, 225, 200), newCoords)
-        self.collider.topleft = (self.pos.x, self.pos.y)
+#     def draw(self):
+#         newCoords = []
+#         for p in self.coords:
+#             newX = p[0] + self.pos.x
+#             newY = p[1] + self.pos.y
+#             newCoords.append((newX, newY))
+#         pygame.draw.polygon(self.surf, (138, 225, 200), newCoords)
+#         self.collider.topleft = (self.pos.x, self.pos.y)
 
-    def move(self, acceleration, friction, obstacles):
-        self.acc = Vector2(0, 0)
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_a]:
-            self.acc.x = -acceleration
-        if keys[pygame.K_d]:
-            self.acc.x = acceleration
-        if keys[pygame.K_w]:
-            self.acc.y = -acceleration
-        if keys[pygame.K_s]:
-            self.acc.y = acceleration
+#     def move(self, acceleration, friction, obstacles):
+#         self.acc = Vector2(0, 0)
+#         keys = pygame.key.get_pressed()
+#         if keys[pygame.K_a]:
+#             self.acc.x = -acceleration
+#         if keys[pygame.K_d]:
+#             self.acc.x = acceleration
+#         if keys[pygame.K_w]:
+#             self.acc.y = -acceleration
+#         if keys[pygame.K_s]:
+#             self.acc.y = acceleration
 
-        self.acc.x += self.vel.x * friction
-        self.acc.y += self.vel.y * friction
-        self.vel += self.acc
-        self.pos += self.vel + 0.5 * self.acc
-        self.collider.topleft = (self.pos.x, self.pos.y)
+#         self.acc.x += self.vel.x * friction
+#         self.acc.y += self.vel.y * friction
+#         self.vel += self.acc
+#         self.pos += self.vel + 0.5 * self.acc
+#         self.collider.topleft = (self.pos.x, self.pos.y)
 
-        for ob in obstacles:
-            if check_collision(self, ob):
-                resolve_wall_penetration(self, [ob.collider])
+#         for ob in obstacles:
+#             if check_collision(self, ob):
+#                 resolve_wall_penetration(self, [ob.collider])
 
-        mouse_x, mouse_y = pygame.mouse.get_pos()
-        center_offset = Vector2(20, 20)
-        direction = Vector2(mouse_x, mouse_y) - (self.pos + center_offset)
-        angle = math.atan2(direction.y, direction.x) - math.pi / 2
-        cos_a = math.cos(angle)
-        sin_a = math.sin(angle)
-        rotated_coords = []
-        for p in self.base_coords:
-            rel = Vector2(p) - center_offset
-            rx = rel.x * cos_a - rel.y * sin_a
-            ry = rel.x * sin_a + rel.y * cos_a
-            rotated_coords.append(
-                (rx + center_offset.x, ry + center_offset.y)
-            )
-        self.coords = rotated_coords
+#         mouse_x, mouse_y = pygame.mouse.get_pos()
+#         center_offset = Vector2(20, 20)
+#         direction = Vector2(mouse_x, mouse_y) - (self.pos + center_offset)
+#         angle = math.atan2(direction.y, direction.x) - math.pi / 2
+#         cos_a = math.cos(angle)
+#         sin_a = math.sin(angle)
+#         rotated_coords = []
+#         for p in self.base_coords:
+#             rel = Vector2(p) - center_offset
+#             rx = rel.x * cos_a - rel.y * sin_a
+#             ry = rel.x * sin_a + rel.y * cos_a
+#             rotated_coords.append(
+#                 (rx + center_offset.x, ry + center_offset.y)
+#             )
+#         self.coords = rotated_coords
 
-    def shoot(self):
-        mouse_x, mouse_y = pygame.mouse.get_pos()
-        direction = Vector2(mouse_x, mouse_y) - (self.pos + Vector2(20, 20))
-        if direction.length_squared() == 0:
-            return None
+#     def shoot(self):
+#         mouse_x, mouse_y = pygame.mouse.get_pos()
+#         direction = Vector2(mouse_x, mouse_y) - (self.pos + Vector2(20, 20))
+#         if direction.length_squared() == 0:
+#             return None
 
-        heading = direction.normalize()
-        best_proj = -float('inf')
-        nose_local = None
-        for p in self.coords:
-            local = Vector2(p)
-            proj = local.dot(heading)
-            if proj > best_proj:
-                best_proj = proj
-                nose_local = local
-        if nose_local is None:
-            nose_local = Vector2(20, 20)
-        start = self.pos + nose_local
-        return Bullet(start, direction)
+#         heading = direction.normalize()
+#         best_proj = -float('inf')
+#         nose_local = None
+#         for p in self.coords:
+#             local = Vector2(p)
+#             proj = local.dot(heading)
+#             if proj > best_proj:
+#                 best_proj = proj
+#                 nose_local = local
+#         if nose_local is None:
+#             nose_local = Vector2(20, 20)
+#         start = self.pos + nose_local
+#         return Bullet(start, direction)
 
 
 class Obstacle(object):
@@ -181,6 +181,12 @@ class Bullet:
             self.radius
         )
 
+
+"""
+
+FLOOD FILL
+
+"""
 class NavigationNode:
     def __init__(self, position: Vector2):
         self.position = Vector2(position)
@@ -207,7 +213,7 @@ def can_place_bot(pos: Vector2, obstacles, map_rect, radius: float) -> bool:
         
 
 
-def build_nav_graph_flood_fill(start_pos: Vector2, obstacles, map_rect: pygame.Rect,bot_radius: float) -> dict[tuple[int, int], NavigationNode]:
+def build_nav_graph_flood_fill(start_pos: Vector2, obstacles, map_rect: pygame.Rect,bot_radius: float):
     step = bot_radius
     nodes: dict[tuple[int, int], NavigationNode] = {}
     queue = deque()
@@ -261,3 +267,115 @@ def draw_nav_graph(surface, nav_nodes):
             pygame.draw.line(surface, (0, 90, 0), node.position, n.position, 1)
 
 
+class PathPlanner:
+    def __init__(self, owner, nav_graph: dict):
+        self.nav_graph = nav_graph
+        self.owner = owner  # konkretny bot
+        self.destination_node = None
+
+
+    def get_closest_node(self, pos: Vector2):
+        closest_node = None
+        closest_dist_sq = float('inf')
+        for node in self.nav_graph.values():
+            dist_sq = (node.position - pos).length_squared()
+            if dist_sq < closest_dist_sq:
+                closest_dist_sq = dist_sq
+                closest_node = node
+        return closest_node
+    
+
+    def plan_path(self, target_pos: Vector2, path: list):
+        path.clear()
+
+        start_node = self.get_closest_node(self.owner.pos)
+        end_node = self.get_closest_node(target_pos)
+
+        if start_node is None or end_node is None:
+            return False
+        
+        #A*
+        open_set = []
+        closed_set = set()
+        came_from = {}
+
+        g_score = {}
+        f_score = {}
+
+        for node in self.nav_graph.values():
+            g_score[node] = float('inf')
+            f_score[node] = float('inf')
+
+        g_score[start_node] = 0
+        f_score[start_node] = (start_node.position - end_node.position).length()
+
+        open_set.append(start_node)
+
+        while open_set:
+            current = min(open_set, key=lambda node: f_score[node])
+            if current == end_node:
+                self.reconstruct_path(came_from, current, path)
+                return True
+            open_set.remove(current)
+            closed_set.add(current)
+            for neighbor in current.neighbors:
+                if neighbor in closed_set:
+                    continue
+                tentative_g_score = (g_score[current] + (current.position - neighbor.position).length())
+                if neighbor not in open_set:
+                    open_set.append(neighbor)
+                elif tentative_g_score >= g_score[neighbor]:
+                    continue
+                came_from[neighbor] = current
+                g_score[neighbor] = tentative_g_score
+                f_score[neighbor] = (g_score[neighbor] +(neighbor.position - end_node.position).length())
+
+        return False
+    
+
+    def reconstruct_path(self, came_from: dict, current: NavigationNode, path: list):
+        total_path = [current.position]
+
+        while current in came_from:
+            current = came_from[current]
+            total_path.append(current.position)
+
+        total_path.reverse()
+        path.extend(total_path)
+
+class dummybot:
+    def __init__(self, x, y):
+        self.pos = Vector2(x, y)
+        self.vel = Vector2(0, 0)
+        self.speed = 120
+
+        self.radius = 15
+        self.collider = pygame.Rect(self.pos.x - self.radius, self.pos.y - self.radius, self.radius * 2, self.radius * 2
+        )
+
+        self.path = []
+        self.current_wp = 0
+
+    def set_path(self, path):
+        self.path = list(path)
+        self.current_wp = 0
+
+    def update(self, dt):
+        if not self.path or self.current_wp >= len(self.path):
+            self.vel.update(0, 0)
+            return
+        target = self.path[self.current_wp]
+        to_target = target - self.pos
+        if to_target.length_squared() < 4:
+            self.current_wp += 1
+            return
+        self.vel = to_target.normalize() * self.speed
+        self.pos += self.vel * dt
+
+        self.collider.center = self.pos
+
+    def draw(self, surface):
+        pygame.draw.circle(surface, (220, 60, 60), (int(self.pos.x), int(self.pos.y)), self.radius)
+
+        if len(self.path) > 1:
+            pygame.draw.lines(surface, (255, 200, 0), False, self.path, 2)
