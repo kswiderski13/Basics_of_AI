@@ -13,8 +13,6 @@ vector = pygame.math.Vector2
 height = 800
 width = 580
 fps = 60
-acceleration = 0.5
-friction = -0.1
 wall_color = (0, 100, 255)
 
 # walls
@@ -32,75 +30,45 @@ def draw_walls(screen):
 
     return [top, bottom, left, right]
 
-def handle_wall_collision_entity(entity, walls, thickness=10):
-    if hasattr(entity, 'collider'):
-        for wall in walls:
-            if entity.collider.colliderect(wall):
-                if wall.top == 0 and wall.height == thickness:
-                    entity.pos.y = wall.bottom
-                    entity.vel.y = 0
-                elif wall.bottom == height and wall.height == thickness:
-                    entity.pos.y = wall.top - entity.collider.height
-                    entity.vel.y = 0
-                elif wall.left == 0 and wall.width == thickness:
-                    entity.pos.x = wall.right
-                    entity.vel.x = 0
-                elif wall.right == width and wall.width == thickness:
-                    entity.pos.x = wall.left - entity.collider.width
-                    entity.vel.x = 0
-                entity.collider.topleft = (entity.pos.x, entity.pos.y)
-    else:
-        for wall in walls:
-            if wall.left == 0 and wall.width == thickness:
-                min_x = wall.right + entity.radius
-                if entity.pos.x < min_x:
-                    entity.pos.x = min_x
-                    entity.vel.x = 0
-            elif wall.right == width and wall.width == thickness:
-                max_x = wall.left - entity.radius
-                if entity.pos.x > max_x:
-                    entity.pos.x = max_x
-                    entity.vel.x = 0
-            elif wall.top == 0 and wall.height == thickness:
-                min_y = wall.bottom + entity.radius
-                if entity.pos.y < min_y:
-                    entity.pos.y = min_y
-                    entity.vel.y = 0
-            elif wall.bottom == height and wall.height == thickness:
-                max_y = wall.top - entity.radius
-                if entity.pos.y > max_y:
-                    entity.pos.y = max_y
-                    entity.vel.y = 0
-
 framepersecond = pygame.time.Clock()
 
 display = pygame.display.set_mode((width, height))
 pygame.display.set_caption("DM_exercise_2")
 
-# obstacles
-obstacle1 = classes2.Obstacle(20, 100, 60, display)
-obstacle2 = classes2.Obstacle(20, 200, 300, display)
-obstacle3 = classes2.Obstacle(20, 150, 150, display)
+# obstacles (na razie okręgi)
+obstacle1 = classes2.Obstacle(40, 150, 200, display)
+obstacle2 = classes2.Obstacle(50, 350, 400, display)
+obstacle3 = classes2.Obstacle(35, 420, 150, display)
 obstacles = [obstacle1, obstacle2, obstacle3]
-
-#bots
-bot1 = dummybot(Vector2(100, 100), display)
-
 
 MAP_RECT = pygame.Rect(0, 0, width, height)
 BOT_RADIUS = 15
 
 nav_graph = classes2.build_nav_graph_flood_fill(
-    start_pos=Vector2(50, 50),   #dowolny punkt startowy
+    start_pos=Vector2(50, 50),
     obstacles=obstacles,
     map_rect=MAP_RECT,
     bot_radius=BOT_RADIUS
 )
 
-planner = classes2.PathPlanner(bot1, nav_graph)
+# spawn pointy
+spawn_points = [
+    Vector2(80, 80),
+    Vector2(width - 80, 80),
+    Vector2(80, height - 80),
+    Vector2(width - 80, height - 80)
+]
 
-path = []
-bot1.set_path(path)
+bots = []
+for sp in spawn_points:
+    b = dummybot(sp, display)
+    b.planner = classes2.PathPlanner(b, nav_graph)
+    bots.append(b)
+
+bullets = []
+rockets = []
+pickups = classes2.spawn_pickups(display, MAP_RECT, obstacles)
+
 # main loop
 while True:
     for event in pygame.event.get():
@@ -117,7 +85,33 @@ while True:
         o.draw()
 
     classes2.draw_nav_graph(display, nav_graph)
-    bot1.update(dt)
-    bot1.draw(display)
+
+    for p in pickups[:]:
+        p.draw(display)
+
+    for b in bullets[:]:
+        b.update(dt)
+        b.draw(display)
+        if not MAP_RECT.collidepoint(b.pos.x, b.pos.y):
+            bullets.remove(b)
+
+    for r in rockets[:]:
+        exploded = r.update(dt, bots)
+        r.draw(display)
+        if exploded or not MAP_RECT.collidepoint(r.pos.x, r.pos.y):
+            rockets.remove(r)
+
+    for bot in bots:
+        bot.update(dt, bots, obstacles, pickups, bullets, rockets, MAP_RECT)
+        bot.draw(display)
 
     pygame.display.update()
+
+
+
+    #TO DO:
+    #zachowanie botów, bo są upo teraz
+    #zakończenie gry, kiedy zostanie ostatni bot i restart
+    #zamiana okręgów na wielokąty i ich rozstawienie jako przeszkody w coś typu labirynt
+
+
