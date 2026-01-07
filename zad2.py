@@ -1,117 +1,176 @@
-# imports
 import pygame
+import random
 from pygame.math import Vector2
-from pygame.locals import *
-import sys
-import classes2
-from classes2 import dummybot
 
-pygame.init()
-vector = pygame.math.Vector2
+from classes2 import (
+    dummybot,
+    PathPlanner,
+    NavigationNode,
+    Bullet,
+    Rocket,
+    Pickup,
+    build_nav_graph_flood_fill,
+    point_in_poly,
+    resolve_wall_penetration,
+    draw_nav_graph
 
-# setup
-height = 800
-width = 580
-fps = 60
-wall_color = (0, 100, 255)
-
-# walls
-def draw_walls(screen):
-    thickness = 10
-    top = pygame.Rect(0, 0, width, thickness)
-    bottom = pygame.Rect(0, height - thickness, width, thickness)
-    left = pygame.Rect(0, 0, thickness, height)
-    right = pygame.Rect(width - thickness, 0, thickness, height)
-
-    pygame.draw.rect(screen, wall_color, top)
-    pygame.draw.rect(screen, wall_color, bottom)
-    pygame.draw.rect(screen, wall_color, left)
-    pygame.draw.rect(screen, wall_color, right)
-
-    return [top, bottom, left, right]
-
-framepersecond = pygame.time.Clock()
-
-display = pygame.display.set_mode((width, height))
-pygame.display.set_caption("DM_exercise_2")
-
-# obstacles (na razie okręgi)
-obstacle1 = classes2.Obstacle(40, 150, 200, display)
-obstacle2 = classes2.Obstacle(50, 350, 400, display)
-obstacle3 = classes2.Obstacle(35, 420, 150, display)
-obstacles = [obstacle1, obstacle2, obstacle3]
-
-MAP_RECT = pygame.Rect(0, 0, width, height)
-BOT_RADIUS = 15
-
-nav_graph = classes2.build_nav_graph_flood_fill(
-    start_pos=Vector2(50, 50),
-    obstacles=obstacles,
-    map_rect=MAP_RECT,
-    bot_radius=BOT_RADIUS
 )
 
-# spawn pointy
-spawn_points = [
-    Vector2(80, 80),
-    Vector2(width - 80, 80),
-    Vector2(80, height - 80),
-    Vector2(width - 80, height - 80)
+pygame.init()
+
+WIDTH, HEIGHT = 800, 800
+display = pygame.display.set_mode((WIDTH, HEIGHT))
+clock = pygame.time.Clock()
+fps = 60
+
+MAP_RECT = pygame.Rect(0, 0, WIDTH, HEIGHT)
+
+OBSTACLES = [
+    pygame.Rect(0, 0, WIDTH, 40),
+    pygame.Rect(0, HEIGHT - 40, WIDTH, 40),
+    pygame.Rect(0, 0, 40, HEIGHT),
+    pygame.Rect(WIDTH - 40, 0, 40, HEIGHT),
+
+    pygame.Rect(300, 250, 200, 40),
+    pygame.Rect(300, 500, 200, 40),
+
+    pygame.Rect(150, 150, 40, 200),
+    pygame.Rect(650, 150, 40, 200),
+    pygame.Rect(150, 450, 40, 200),
+    pygame.Rect(650, 450, 40, 200),
+
+    pygame.Rect(250, 350, 40, 40),
+    pygame.Rect(550, 350, 40, 40),
+
+    pygame.Rect(650, 280, 110, 140)
 ]
 
-bots = []
-for sp in spawn_points:
-    b = dummybot(sp, display)
-    b.planner = classes2.PathPlanner(b, nav_graph)
-    bots.append(b)
+POLY_OBSTACLES = [
+    [(100, 300), (150, 280), (150, 320)],
+    
+]
 
-bullets = []
-rockets = []
-pickups = classes2.spawn_pickups(display, MAP_RECT, obstacles)
+SPAWNS = [
+    (100, 100), (200, 100), (300, 100),
+    (500, 100), (600, 100), (700, 100),
 
-# main loop
-while True:
-    for event in pygame.event.get():
-        if event.type == QUIT:
-            pygame.quit()
-            sys.exit()
-
-    dt = framepersecond.tick(fps) / 1000.0
-
-    display.fill((0, 0, 0))
-    walls = draw_walls(display)
-
-    for o in obstacles:
-        o.draw()
-
-    classes2.draw_nav_graph(display, nav_graph)
-
-    for p in pickups[:]:
-        p.draw(display)
-
-    for b in bullets[:]:
-        b.update(dt)
-        b.draw(display)
-        if not MAP_RECT.collidepoint(b.pos.x, b.pos.y):
-            bullets.remove(b)
-
-    for r in rockets[:]:
-        exploded = r.update(dt, bots)
-        r.draw(display)
-        if exploded or not MAP_RECT.collidepoint(r.pos.x, r.pos.y):
-            rockets.remove(r)
-
-    for bot in bots:
-        bot.update(dt, bots, obstacles, pickups, bullets, rockets, MAP_RECT)
-        bot.draw(display)
-
-    pygame.display.update()
+    (100, 700), (200, 700), (300, 700),
+    (500, 700), (600, 700), (700, 700),
+]
 
 
+def main():
+    nav_graph = build_nav_graph_flood_fill(
+        MAP_RECT,
+        15,
+        OBSTACLES,
+        POLY_OBSTACLES
+    )
 
-    #TO DO:
-    #zachowanie botów, bo są upo teraz
-    #zakończenie gry, kiedy zostanie ostatni bot i restart
-    #zamiana okręgów na wielokąty i ich rozstawienie jako przeszkody w coś typu labirynt
+    bots = []
+    bullets = []
+    rockets = []
+
+    pickups = [
+        Pickup((400, 200), "health", 25, display),
+        Pickup((400, 600), "rail", 5, display),
+        Pickup((400, 400), "rocket", 3, display),
+    ]
+
+    used_spawns = random.sample(SPAWNS, 4)
+
+    for pos in used_spawns:
+        bot = dummybot(Vector2(pos), display)
+        bot.planner = PathPlanner(bot, nav_graph)
+        bots.append(bot)
+
+    running = True
+    while running:
+        dt = clock.tick(fps) / 1000.0
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        for bot in bots:
+            bot.update(dt, bots, OBSTACLES, pickups, bullets, rockets, MAP_RECT)
+
+        for b in bullets[:]:
+            b.update(dt, OBSTACLES)
+            if not b.alive:
+                bullets.remove(b)
+                continue
+
+            bullet_rect = pygame.Rect(b.pos.x - b.radius, b.pos.y - b.radius, b.radius * 2, b.radius * 2)
+            hit = False
+
+            for r in OBSTACLES:
+                if bullet_rect.colliderect(r):
+                    hit = True
+                    break
+
+            if not hit:
+                for poly in POLY_OBSTACLES:
+                    if point_in_poly(b.pos.x, b.pos.y, poly):
+                        hit = True
+                        break
+
+            if hit:
+                bullets.remove(b)
+                continue
+
+        for r in rockets[:]:
+            r.update(dt, bots, OBSTACLES)
+            if not r.alive:
+                rockets.remove(r)
+                continue
+
+            rocket_rect = pygame.Rect(r.pos.x - r.radius, r.pos.y - r.radius, r.radius * 2, r.radius * 2)
+            hit = False
+
+            for ob in OBSTACLES:
+                if rocket_rect.colliderect(ob):
+                    r.explode(bots)
+                    hit = True
+                    break
+
+            if not hit:
+                for poly in POLY_OBSTACLES:
+                    if point_in_poly(r.pos.x, r.pos.y, poly):
+                        r.explode(bots)
+                        hit = True
+                        break
+
+            if hit or not r.alive:
+                rockets.remove(r)
+
+        display.fill((20, 20, 20))
 
 
+        for r in OBSTACLES:
+            pygame.draw.rect(display, (60, 60, 60), r)
+
+        for poly in POLY_OBSTACLES:
+            pygame.draw.polygon(display, (80, 80, 80), poly)
+
+        draw_nav_graph(display, nav_graph)     
+
+        for p in pickups:
+            p.draw(display)
+
+        for b in bots:
+            b.draw(display)
+
+        for b in bullets:
+            b.draw(display)
+
+        for r in rockets:
+            r.draw(display)
+
+        pygame.display.flip()
+
+    pygame.quit()
+
+
+if __name__ == "__main__":
+    main()

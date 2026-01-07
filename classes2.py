@@ -45,6 +45,7 @@ def resolve_wall_penetration(entity, walls):
             if hasattr(entity, '_stuck_timer'):
                 entity._stuck_timer = 0.0
 
+
 class Obstacle(object):
     def __init__(self, radius, posX, posY, surface):
         self.radius = radius
@@ -70,6 +71,7 @@ class Obstacle(object):
             self.y - self.radius
         )
 
+
 def check_collision(player, obstacle_or_iterable):
     if hasattr(obstacle_or_iterable, "collider"):
         return player.collider.colliderect(obstacle_or_iterable.collider)
@@ -81,6 +83,24 @@ def check_collision(player, obstacle_or_iterable):
     except Exception:
         return False
 
+
+def point_in_poly(x, y, poly):
+    inside = False
+    n = len(poly)
+    px1, py1 = poly[0]
+    for i in range(n + 1):
+        px2, py2 = poly[i % n]
+        if y > min(py1, py2):
+            if y <= max(py1, py2):
+                if x <= max(px1, px2):
+                    if py1 != py2:
+                        xinters = (y - py1) * (px2 - px1) / (py2 - py1) + px1
+                    if px1 == px2 or x <= xinters:
+                        inside = not inside
+        px1, py1 = px2, py2
+    return inside
+
+
 class Bullet:
     def __init__(self, pos: Vector2, direction: Vector2, speed=600, damage=20, owner=None):
         self.pos = Vector2(pos)
@@ -89,9 +109,15 @@ class Bullet:
         self.color = (255, 255, 0)
         self.damage = damage
         self.owner = owner
+        self.alive = True
 
-    def update(self, dt: float):
-        self.pos += self.vel * dt
+    def update(self, dt: float, obstacles):
+        new_pos = self.pos + self.vel * dt
+        for r in obstacles:
+            if r.collidepoint(new_pos.x, new_pos.y):
+                self.alive = False
+                return
+        self.pos = new_pos
 
     def draw(self, surf: pygame.Surface):
         pygame.draw.circle(
@@ -100,6 +126,7 @@ class Bullet:
             (int(self.pos.x), int(self.pos.y)),
             self.radius
         )
+
 
 class Rocket:
     def __init__(self, pos: Vector2, direction: Vector2, owner=None):
@@ -112,20 +139,29 @@ class Rocket:
         self.damage = 40
         self.life_time = 3.0
         self.age = 0.0
+        self.alive = True
 
-    def update(self, dt: float, bots):
-        self.pos += self.vel * dt
+    def update(self, dt: float, bots, obstacles):
+        new_pos = self.pos + self.vel * dt
+        for r in obstacles:
+            if r.collidepoint(new_pos.x, new_pos.y):
+                self.pos = new_pos
+                self.explode(bots)
+                self.alive = False
+                return
+        self.pos = new_pos
         self.age += dt
         if self.age >= self.life_time:
             self.explode(bots)
-            return True
+            self.alive = False
+            return
         for b in bots:
             if b is self.owner:
                 continue
             if (b.pos - self.pos).length_squared() <= (b.radius + self.radius) ** 2:
                 self.explode(bots)
-                return True
-        return False
+                self.alive = False
+                return
 
     def explode(self, bots):
         for b in bots:
@@ -141,15 +177,14 @@ class Rocket:
             self.radius
         )
 
+
 class NavigationNode:
     def __init__(self, position: Vector2):
         self.position = Vector2(position)
         self.neighbors = []
 
-    bot_radius = 15
-    step = bot_radius
 
-def can_place_bot(pos: Vector2, obstacles, map_rect, radius: float) -> bool:
+def can_place_bot(pos: Vector2, obstacles, poly_obstacles, map_rect: pygame.Rect, radius: float) -> bool:
     if pos.x - radius < map_rect.left:
         return False
     if pos.x + radius > map_rect.right:
@@ -158,62 +193,38 @@ def can_place_bot(pos: Vector2, obstacles, map_rect, radius: float) -> bool:
         return False
     if pos.y + radius > map_rect.bottom:
         return False
-    for ob in obstacles:
-        d_sq = (Vector2(ob.x, ob.y) - pos).length_squared()
-        if d_sq < (radius + ob.radius) ** 2:
+    bot_rect = pygame.Rect(pos.x - radius, pos.y - radius, radius * 2, radius * 2)
+    for r in obstacles:
+        if bot_rect.colliderect(r):
+            return False
+    for poly in poly_obstacles:
+        if point_in_poly(pos.x, pos.y, poly):
             return False
     return True
 
-def build_nav_graph_flood_fill(start_pos: Vector2, obstacles, map_rect: pygame.Rect, bot_radius: float):
-    step = bot_radius * 0.75
+
+def build_nav_graph_flood_fill(map_rect: pygame.Rect, bot_radius: float, obstacles, poly_obstacles):
     nodes: dict[tuple[int, int], NavigationNode] = {}
-    queue = deque()
-
-    start = Vector2(start_pos)
-    if not can_place_bot(start, obstacles, map_rect, bot_radius):
-        return nodes
-
-    key = (int(start.x), int(start.y))
-    nodes[key] = NavigationNode(start)
-    queue.append(start)
-
-    directions = [
-        Vector2(1, 0), Vector2(-1, 0),
-        Vector2(0, 1), Vector2(0, -1),
-        Vector2(1, 1), Vector2(-1, 1),
-        Vector2(1, -1), Vector2(-1, -1)
-    ]
-
-    while queue:
-        current = queue.popleft()
-        current_key = (int(current.x), int(current.y))
-        current_node = nodes[current_key]
-
-        for d in directions:
-            new_pos = current + d * step
-            new_key = (int(new_pos.x), int(new_pos.y))
-
-            if new_key in nodes:
-                continue
-
-            if not can_place_bot(new_pos, obstacles, map_rect, bot_radius):
-                continue
-
-            new_node = NavigationNode(new_pos)
-            nodes[new_key] = new_node
-
-            current_node.neighbors.append(new_node)
-            new_node.neighbors.append(current_node)
-
-            queue.append(new_pos)
-
+    step = int(bot_radius * 2)
+    for y in range(map_rect.top + int(bot_radius), map_rect.bottom - int(bot_radius), step):
+        for x in range(map_rect.left + int(bot_radius), map_rect.right - int(bot_radius), step):
+            pos = Vector2(x, y)
+            if can_place_bot(pos, obstacles, poly_obstacles, map_rect, bot_radius):
+                nodes[(x, y)] = NavigationNode(pos)
+    for (x, y), node in nodes.items():
+        for dx, dy in [(step, 0), (-step, 0), (0, step), (0, -step)]:
+            nx, ny = x + dx, y + dy
+            if (nx, ny) in nodes:
+                node.neighbors.append(nodes[(nx, ny)])
     return nodes
+
 
 def draw_nav_graph(surface, nav_nodes):
     for node in nav_nodes.values():
         pygame.draw.circle(surface, (0, 180, 0), node.position, 2)
         for n in node.neighbors:
             pygame.draw.line(surface, (0, 90, 0), node.position, n.position, 1)
+
 
 class PathPlanner:
     def __init__(self, owner, nav_graph: dict):
@@ -233,73 +244,53 @@ class PathPlanner:
 
     def plan_path(self, target_pos: Vector2, path: list):
         path.clear()
-
         start_node = self.get_closest_node(self.owner.pos)
         end_node = self.get_closest_node(target_pos)
-
-        #Jeśli nie ma węzła startowego lub końcowego, false
         if start_node is None or end_node is None:
             return False
-
-        # Jeśli start i koniec są takie same, false
         if start_node == end_node:
             return False
-
-        # A*
         open_set = []
         closed_set = set()
         came_from = {}
-
         g_score = {}
         f_score = {}
-
         for node in self.nav_graph.values():
             g_score[node] = float('inf')
             f_score[node] = float('inf')
-
         g_score[start_node] = 0
         f_score[start_node] = (start_node.position - end_node.position).length()
-
         open_set.append(start_node)
-
         while open_set:
-            # wybór węzła o najmniejszym f_score
             current = min(open_set, key=lambda node: f_score[node])
-
-            # jeśli dotarliśmy do celu, rekonstrukcja ścieżki
             if current == end_node:
                 self.reconstruct_path(came_from, current, path)
                 return True
-
             open_set.remove(current)
             closed_set.add(current)
-
             for neighbor in current.neighbors:
                 if neighbor in closed_set:
                     continue
-
                 tentative_g_score = g_score[current] + (current.position - neighbor.position).length()
-
                 if neighbor not in open_set:
                     open_set.append(neighbor)
                 elif tentative_g_score >= g_score[neighbor]:
                     continue
-
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g_score
                 f_score[neighbor] = g_score[neighbor] + (neighbor.position - end_node.position).length()
-
         return False
 
     def reconstruct_path(self, came_from: dict, current: 'NavigationNode', path: list):
         total_path = [current.position]
-
         while current in came_from:
             current = came_from[current]
             total_path.append(current.position)
-
         total_path.reverse()
+        if total_path and (total_path[0] - self.owner.pos).length_squared() < 1.0:
+            total_path.pop(0)
         path.extend(total_path)
+
 
 class Pickup:
     def __init__(self, pos: Vector2, kind: str, amount: int, surface):
@@ -318,6 +309,7 @@ class Pickup:
             color = (255, 100, 0)
         pygame.draw.circle(surf, color, (int(self.pos.x), int(self.pos.y)), self.radius)
 
+
 def spawn_pickups(surface, map_rect, obstacles):
     pickups = []
     kinds = ["health", "rail", "rocket"]
@@ -328,9 +320,12 @@ def spawn_pickups(surface, map_rect, obstacles):
             pos = Vector2(x, y)
             ok = True
             for ob in obstacles:
-                if (Vector2(ob.x, ob.y) - pos).length_squared() < (ob.radius + 20) ** 2:
-                    ok = False
-                    break
+                if hasattr(ob, "x"):
+                    center = Vector2(ob.x, ob.y)
+                    r = ob.radius
+                    if (center - pos).length_squared() < (r + 20) ** 2:
+                        ok = False
+                        break
             if ok:
                 kind = random.choice(kinds)
                 amount = 25 if kind == "health" else 5
@@ -338,17 +333,18 @@ def spawn_pickups(surface, map_rect, obstacles):
                 break
     return pickups
 
+
 class dummybot:
     def __init__(self, pos, surface):
         self.pos = Vector2(pos)
         self.vel = Vector2(0, 0)
         self.speed = 120
         self.radius = 15
-        self.collider = pygame.Rect(self.pos.x - self.radius, self.pos.y - self.radius, self.radius * 2, self.radius * 2)
+        self.collider = pygame.Rect(self.pos.x - self.radius, self.pos.y - self.radius,
+                                    self.radius * 2, self.radius * 2)
         self.path = []
         self.current_wp = 0
         self.surf = surface
-
         self.hp = 100
         self.max_hp = 100
         self.ammo_rail = 10
@@ -357,17 +353,39 @@ class dummybot:
         self.reload_time_rocket = 2.0
         self.rail_cooldown = 0.0
         self.rocket_cooldown = 0.0
-
         self.state = "search"
         self.target_enemy = None
         self.planner = None
+        self.combat_range = 260
+        self.too_close_range = 120
+        self.stop_shoot_speed = 10
+        self.last_seen_enemy_pos = None
+        self.time_since_enemy_seen = 0.0
+        self.state_time = 0.0
+        self.search_target_pos = None
+
+    def has_line_of_sight(self, target, obstacles):
+        x1, y1 = self.pos
+        x2, y2 = target.pos
+        for r in obstacles:
+            if r.clipline((x1, y1), (x2, y2)):
+                return False
+        return True
 
     def set_path(self, path):
         filtered = [p for p in path if (p - self.pos).length_squared() > 1.0]
         self.path = filtered
         self.current_wp = 0
 
-    def follow_path(self, dt):
+    def is_position_blocked(self, pos, bots):
+        for b in bots:
+            if b is self or b.hp <= 0:
+                continue
+            if (b.pos - pos).length_squared() < (self.radius * 2) ** 2:
+                return True
+        return False
+
+    def follow_path(self, dt, bots):
         if not self.path or self.current_wp >= len(self.path):
             self.vel = Vector2(0, 0)
             return
@@ -378,28 +396,58 @@ class dummybot:
             self.pos = target
             self.current_wp += 1
             self.vel = Vector2(0, 0)
+            self.collider.center = self.pos
+            return
+        if self.is_position_blocked(target, bots):
+            offset = Vector2(random.uniform(-1, 1), random.uniform(-1, 1))
+            offset.scale_to_length(10)
+            self.pos += offset * dt
+            self.collider.center = self.pos
             return
         self.vel = to_target.normalize() * self.speed
         self.pos += self.vel * dt
         self.collider.center = self.pos
 
+    def plan_to_target(self, target_pos):
+        if self.planner is None:
+            return
+        path = []
+        if self.planner.plan_path(target_pos, path):
+            self.set_path(path)
+
     def choose_state(self, bots, pickups):
         if self.hp <= 0:
             self.state = "dead"
+            self.target_enemy = None
             return
+
+        closest_enemy = self.find_closest_enemy(bots)
+
         low_hp = self.hp < 40
         low_ammo = (self.ammo_rail + self.ammo_rocket) < 3
-        visible_enemy = self.find_closest_enemy(bots)
+
         if low_hp or low_ammo:
             best_pickup = self.find_best_pickup(pickups)
             if best_pickup is not None:
                 self.state = "gather"
                 self.target_enemy = best_pickup
+                self.search_target_pos = None
                 return
-        if visible_enemy is not None:
+
+        if closest_enemy is not None and self.has_line_of_sight(closest_enemy, self.obstacles):
             self.state = "fight"
-            self.target_enemy = visible_enemy
+            self.target_enemy = closest_enemy
+            self.search_target_pos = None
+            self.path = []
+            self.current_wp = 0
             return
+
+        if self.last_seen_enemy_pos is not None and self.time_since_enemy_seen < 6.0:
+            self.state = "search"
+            self.target_enemy = None
+            self.search_target_pos = Vector2(self.last_seen_enemy_pos)
+            return
+
         self.state = "search"
         self.target_enemy = None
 
@@ -425,27 +473,35 @@ class dummybot:
                 best = p
         return best
 
-    def plan_to_target(self, target_pos):
-        if self.planner is None:
-            return
-        if (target_pos - self.pos).length_squared() < 100:
-            return
-        path = []
-        if self.planner.plan_path(target_pos, path):
-            self.set_path(path)
-
-    def update_combat(self, dt, bots, bullets, rockets):
+    def update_combat(self, dt, bots, bullets, rockets, obstacles):
         self.rail_cooldown = max(0.0, self.rail_cooldown - dt)
         self.rocket_cooldown = max(0.0, self.rocket_cooldown - dt)
-
         if self.target_enemy is None or self.target_enemy.hp <= 0:
             return
-
+        if self.has_line_of_sight(self.target_enemy, obstacles):
+            self.last_seen_enemy_pos = Vector2(self.target_enemy.pos)
+            self.time_since_enemy_seen = 0.0
+        else:
+            if self.last_seen_enemy_pos is not None and self.time_since_enemy_seen < 6.0:
+                self.plan_to_target(self.last_seen_enemy_pos)
+                return
+            return
         to_enemy = self.target_enemy.pos - self.pos
         dist = to_enemy.length()
         if dist < 1:
             return
-
+        if dist < self.too_close_range:
+            self.vel = -to_enemy.normalize() * self.speed * 0.7
+            self.pos += self.vel * dt
+            self.collider.center = self.pos
+            return
+        if dist > self.combat_range:
+            self.plan_to_target(self.target_enemy.pos)
+            return
+        self.vel = Vector2(0, 0)
+        self.collider.center = self.pos
+        if self.vel.length() > self.stop_shoot_speed:
+            return
         if self.ammo_rail > 0 and self.rail_cooldown <= 0.0:
             spread = random.uniform(-0.08, 0.08)
             dir = to_enemy.normalize()
@@ -474,47 +530,72 @@ class dummybot:
                     self.ammo_rocket += p.amount
                 pickups.remove(p)
 
+    def apply_separation(self, bots):
+        for b in bots:
+            if b is self:
+                continue
+            d = b.pos - self.pos
+            dist_sq = d.length_squared()
+            min_dist = (self.radius * 2) ** 2
+            if dist_sq < min_dist and dist_sq > 0:
+                push = d.normalize() * -4.0
+                self.pos += push
+                self.collider.center = self.pos
+
     def update(self, dt, bots, obstacles, pickups, bullets, rockets, map_rect):
+        self.obstacles = obstacles
         if self.hp <= 0:
+            self.state = "dead"
             return
-
+        self.time_since_enemy_seen += dt
+        self.state_time += dt
+        prev_state = self.state
         self.choose_state(bots, pickups)
-
+        if self.state != prev_state:
+            self.state_time = 0.0
         if self.state == "search":
-            if not self.path or self.current_wp >= len(self.path):
-                for _ in range(10):
-                    rand_pos = Vector2(
-                        random.randint(40, map_rect.width - 40),
-                        random.randint(40, map_rect.height - 40)
-                    )
-                    if (rand_pos - self.pos).length_squared() > 1000:
-                        self.plan_to_target(rand_pos)
-                        break
-            self.follow_path(dt)
-
+            if self.search_target_pos is not None and self.time_since_enemy_seen < 6.0:
+                if not self.path or self.current_wp >= len(self.path):
+                    self.plan_to_target(self.search_target_pos)
+                self.follow_path(dt, bots)
+            else:
+                if not self.path or self.current_wp >= len(self.path):
+                    for _ in range(10):
+                        rand_pos = Vector2(
+                            random.randint(40, map_rect.width - 40),
+                            random.randint(40, map_rect.height - 40)
+                        )
+                        if (rand_pos - self.pos).length_squared() > 1000:
+                            self.plan_to_target(rand_pos)
+                            break
+                self.follow_path(dt, bots)
+            if self.state_time > 8.0:
+                self.path = []
+                self.current_wp = 0
+                self.search_target_pos = None
+                self.state_time = 0.0
         elif self.state == "gather":
             if isinstance(self.target_enemy, Pickup):
                 self.plan_to_target(self.target_enemy.pos)
-            self.follow_path(dt)
-
+            self.follow_path(dt, bots)
         elif self.state == "fight":
-            if self.target_enemy is not None:
-                self.plan_to_target(self.target_enemy.pos)
-            self.follow_path(dt)
-            self.update_combat(dt, bots, bullets, rockets)
-
+            self.update_combat(dt, bots, bullets, rockets, obstacles)
+        self.apply_separation(bots)
+        for r in obstacles:
+            resolve_wall_penetration(self, [r])
         self.handle_pickups(pickups)
         self.collider.center = self.pos
 
     def draw(self, surface):
-        if self.hp > 0:
-            pygame.draw.circle(surface, (220, 60, 60), (int(self.pos.x), int(self.pos.y)), self.radius)
-            if len(self.path) > 1:
-                pygame.draw.lines(surface, (255, 200, 0), False, self.path, 2)
-            hp_ratio = self.hp / self.max_hp
-            bar_w = 30
-            bar_h = 4
-            x = self.pos.x - bar_w / 2
-            y = self.pos.y - self.radius - 10
-            pygame.draw.rect(surface, (60, 0, 0), (x, y, bar_w, bar_h))
-            pygame.draw.rect(surface, (0, 200, 0), (x, y, bar_w * hp_ratio, bar_h))
+        if self.hp <= 0:
+            return
+        pygame.draw.circle(surface, (220, 60, 60), (int(self.pos.x), int(self.pos.y)), self.radius)
+        if len(self.path) > 1:
+            pygame.draw.lines(surface, (255, 200, 0), False, self.path, 2)
+        hp_ratio = self.hp / self.max_hp
+        bar_w = 30
+        bar_h = 4
+        x = self.pos.x - bar_w / 2
+        y = self.pos.y - self.radius - 10
+        pygame.draw.rect(surface, (60, 0, 0), (x, y, bar_w, bar_h))
+        pygame.draw.rect(surface, (0, 200, 0), (x, y, bar_w * hp_ratio, bar_h))
