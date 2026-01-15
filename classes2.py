@@ -4,6 +4,11 @@ import math
 from collections import deque
 import random
 
+
+
+
+# Funkcja resolve_wall_penetration sprawdza, czy dany byt (entity) koliduje z jakąkolwiek ścianą (walls).
+# Jeśli kolizja zostanie wykryta, funkcja oblicza nakładanie się i przesuwa byt poza ścianę,
 def resolve_wall_penetration(entity, walls):
     is_centered = hasattr(entity, 'radius')
     for w in walls:
@@ -45,7 +50,7 @@ def resolve_wall_penetration(entity, walls):
             if hasattr(entity, '_stuck_timer'):
                 entity._stuck_timer = 0.0
 
-
+# Klasa Obstacle reprezentuje przeszkodę w grze, definiowaną przez promień i pozycję.
 class Obstacle(object):
     def __init__(self, radius, posX, posY, surface):
         self.radius = radius
@@ -71,7 +76,7 @@ class Obstacle(object):
             self.y - self.radius
         )
 
-
+# Funkcja check_collision sprawdza kolizję między graczem a przeszkodą lub iterowalnym zbiorem przeszkód.
 def check_collision(player, obstacle_or_iterable):
     if hasattr(obstacle_or_iterable, "collider"):
         return player.collider.colliderect(obstacle_or_iterable.collider)
@@ -83,7 +88,7 @@ def check_collision(player, obstacle_or_iterable):
     except Exception:
         return False
 
-
+# Funkcja point_in_poly sprawdza, czy punkt (x, y) znajduje się wewnątrz wielokąta zdefiniowanego przez listę wierzchołków poly.
 def point_in_poly(x, y, poly):
     inside = False
     n = len(poly)
@@ -100,7 +105,7 @@ def point_in_poly(x, y, poly):
         px1, py1 = px2, py2
     return inside
 
-
+# Klasa Bullet reprezentuje pocisk wystrzelony przez bota lub gracza.
 class Bullet:
     def __init__(self, pos: Vector2, direction: Vector2, speed=600, damage=20, owner=None):
         self.pos = Vector2(pos)
@@ -127,7 +132,7 @@ class Bullet:
             self.radius
         )
 
-
+# Klasa Rocket reprezentuje rakietę wystrzeloną przez bota lub gracza.
 class Rocket:
     def __init__(self, pos: Vector2, direction: Vector2, owner=None):
         self.pos = Vector2(pos)
@@ -177,7 +182,7 @@ class Rocket:
             self.radius
         )
 
-
+# Klasa NavigationNode reprezentuje węzeł nawigacyjny w grafie nawigacyjnym.
 class NavigationNode:
     def __init__(self, position: Vector2):
         self.position = Vector2(position)
@@ -202,7 +207,7 @@ def can_place_bot(pos: Vector2, obstacles, poly_obstacles, map_rect: pygame.Rect
             return False
     return True
 
-
+# Funkcja build_nav_graph_flood_fill tworzy graf nawigacyjny dla bota na podstawie mapy, promienia bota i przeszkód.
 def build_nav_graph_flood_fill(map_rect: pygame.Rect, bot_radius: float, obstacles, poly_obstacles):
     nodes: dict[tuple[int, int], NavigationNode] = {}
     step = int(bot_radius * 1.5)
@@ -219,14 +224,14 @@ def build_nav_graph_flood_fill(map_rect: pygame.Rect, bot_radius: float, obstacl
                 node.neighbors.append(nodes[(nx, ny)])
     return nodes
 
-
+# Funkcja draw_nav_graph rysuje graf nawigacyjny na podanej powierzchni.
 def draw_nav_graph(surface, nav_nodes):
     for node in nav_nodes.values():
         pygame.draw.circle(surface, (0, 180, 0), node.position, 2)
         for n in node.neighbors:
             pygame.draw.line(surface, (0, 90, 0), node.position, n.position, 1)
 
-
+# Klasa PathPlanner implementuje algorytm A* do planowania ścieżek dla bota na podstawie grafu nawigacyjnego.
 class PathPlanner:
     def __init__(self, owner, nav_graph: dict):
         self.nav_graph = nav_graph
@@ -295,6 +300,7 @@ class PathPlanner:
 
         return False
 
+    # Funkcja reconstruct_path odtwarza ścieżkę od końcowego węzła do początkowego na podstawie słownika came_from.
     def reconstruct_path(self, came_from: dict, current: 'NavigationNode', path: list):
         total_path = [current.position]
         while current in came_from:
@@ -305,6 +311,7 @@ class PathPlanner:
             total_path.pop(0)
         path.extend(total_path)
 
+    # Funkcja smooth_path upraszcza ścieżkę, usuwając zbędne węzły, jeśli istnieje linia widzenia między nimi.
     def smooth_path(self, path, radius):
         if len(path) <= 2:
             return path[:]
@@ -322,7 +329,7 @@ class PathPlanner:
             i = j
 
         return smoothed
-
+    # Funkcja line_of_sight sprawdza, czy istnieje linia widzenia między dwoma punktami a i b, biorąc pod uwagę przeszkody.
     def line_of_sight(self, a: Vector2, b: Vector2, radius):
         direction = b - a
         dist = direction.length()
@@ -341,7 +348,7 @@ class PathPlanner:
 
         return True
 
-
+    # Klasa Pickup reprezentuje przedmiot do zebrania przez bota, taki jak zdrowie lub amunicja.
 class Pickup:
     def __init__(self, pos: Vector2, kind: str, amount: int, surface):
         self.pos = Vector2(pos)
@@ -384,7 +391,7 @@ def spawn_pickups(surface, map_rect, obstacles):
     return pickups
 
 
-
+# Klasa Message reprezentuje wiadomość wysyłaną między botami.
 class Message:
     def __init__(self, sender, receiver, msg, extra=None):
         self.sender = sender
@@ -392,7 +399,7 @@ class Message:
         self.msg = msg
         self.extra = extra
 
-
+# Klasa MessageDispatcher zarządza kolejką wiadomości i ich przetwarzaniem.
 class MessageDispatcher:
     def __init__(self):
         self.queue = deque()
@@ -409,7 +416,7 @@ class MessageDispatcher:
 
 dispatcher = MessageDispatcher()
 
-
+# Klasa Regulator kontroluje częstotliwość aktualizacji działań bota.
 class Regulator:
     def __init__(self, updates_per_second):
         self.interval = 1.0 / updates_per_second
@@ -422,7 +429,7 @@ class Regulator:
             return True
         return False
 
-
+# Klasa Goal reprezentuje podstawowy cel bota w systemie celów.
 class Goal:
     def __init__(self, bot):
         self.bot = bot
@@ -437,7 +444,7 @@ class Goal:
     def terminate(self):
         self.active = False
 
-
+# Klasa GoalFollowPath reprezentuje cel podążania za określoną ścieżką.
 class GoalFollowPath(Goal):
     def activate(self):
         self.active = True
@@ -450,7 +457,7 @@ class GoalFollowPath(Goal):
             return "completed"
         return "active"
 
-
+# Klasa GoalAttackTarget reprezentuje cel atakowania określonego celu.
 class GoalAttackTarget(Goal):
     def process(self):
         if self.bot.target_enemy is None or self.bot.target_enemy.hp <= 0:
@@ -464,7 +471,7 @@ class GoalAttackTarget(Goal):
         )
         return "active"
 
-
+ # Klasa GoalThink reprezentuje nadrzędny cel myślenia i zarządzania podcelami bota.
 class GoalThink(Goal):
     def __init__(self, bot):
         super().__init__(bot)
@@ -487,6 +494,8 @@ class GoalThink(Goal):
             self.subgoals.pop(0)
 
         return "active"
+
+# Klasa dummybot reprezentuje bota w grze z różnymi właściwościami i zachowaniami.
 class dummybot:
     def __init__(self, pos, surface):
         self.pos = Vector2(pos)
