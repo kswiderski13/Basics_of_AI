@@ -195,7 +195,7 @@ def can_place_bot(pos: Vector2, obstacles, poly_obstacles, map_rect: pygame.Rect
         return False
     bot_rect = pygame.Rect(pos.x - radius, pos.y - radius, radius * 2, radius * 2)
     for r in obstacles:
-        if bot_rect.colliderect(r):
+        if bot_rect.colliderect(r.inflate(10, 10)):
             return False
     for poly in poly_obstacles:
         if point_in_poly(pos.x, pos.y, poly):
@@ -206,6 +206,7 @@ def can_place_bot(pos: Vector2, obstacles, poly_obstacles, map_rect: pygame.Rect
 def build_nav_graph_flood_fill(map_rect: pygame.Rect, bot_radius: float, obstacles, poly_obstacles):
     nodes: dict[tuple[int, int], NavigationNode] = {}
     step = int(bot_radius * 2)
+    
     for y in range(map_rect.top + int(bot_radius), map_rect.bottom - int(bot_radius), step):
         for x in range(map_rect.left + int(bot_radius), map_rect.right - int(bot_radius), step):
             pos = Vector2(x, y)
@@ -334,6 +335,109 @@ def spawn_pickups(surface, map_rect, obstacles):
     return pickups
 
 
+
+class Message:
+    def __init__(self, sender, receiver, msg, extra=None):
+        self.sender = sender
+        self.receiver = receiver
+        self.msg = msg
+        self.extra = extra
+
+
+class MessageDispatcher:
+    def __init__(self):
+        self.queue = deque()
+
+    def dispatch(self, sender, receiver, msg, extra=None):
+        self.queue.append(Message(sender, receiver, msg, extra))
+
+    def process(self):
+        while self.queue:
+            m = self.queue.popleft()
+            if hasattr(m.receiver, "handle_message"):
+                m.receiver.handle_message(m)
+
+
+dispatcher = MessageDispatcher()
+
+
+class Regulator:
+    def __init__(self, updates_per_second):
+        self.interval = 1.0 / updates_per_second
+        self.acc = 0.0
+
+    def ready(self, dt):
+        self.acc += dt
+        if self.acc >= self.interval:
+            self.acc = 0.0
+            return True
+        return False
+
+
+class Goal:
+    def __init__(self, bot):
+        self.bot = bot
+        self.active = False
+
+    def activate(self):
+        self.active = True
+
+    def process(self):
+        return "inactive"
+
+    def terminate(self):
+        self.active = False
+
+
+class GoalFollowPath(Goal):
+    def activate(self):
+        self.active = True
+
+    def process(self):
+        if not self.bot.path or self.bot.current_wp >= len(self.bot.path):
+            return "completed"
+        self.bot.follow_path(self.bot.dt, self.bot.bots_ref, self.bot.obstacles_ref)
+        if not self.bot.path or self.bot.current_wp >= len(self.bot.path):
+            return "completed"
+        return "active"
+
+
+class GoalAttackTarget(Goal):
+    def process(self):
+        if self.bot.target_enemy is None or self.bot.target_enemy.hp <= 0:
+            return "completed"
+        self.bot.update_combat(
+            self.bot.dt,
+            self.bot.bots_ref,
+            self.bot.bullets_ref,
+            self.bot.rockets_ref,
+            self.bot.obstacles_ref
+        )
+        return "active"
+
+
+class GoalThink(Goal):
+    def __init__(self, bot):
+        super().__init__(bot)
+        self.subgoals = []
+
+    def add_subgoal(self, goal):
+        self.subgoals.insert(0, goal)
+
+    def process(self):
+        while self.subgoals and not self.subgoals[0].active:
+            self.subgoals[0].activate()
+
+        if not self.subgoals:
+            return "inactive"
+
+        status = self.subgoals[0].process()
+
+        if status == "completed":
+            self.subgoals[0].terminate()
+            self.subgoals.pop(0)
+
+        return "active"
 class dummybot:
     def __init__(self, pos, surface):
         self.pos = Vector2(pos)
@@ -364,6 +468,26 @@ class dummybot:
         self.state_time = 0.0
         self.search_target_pos = None
 
+        self.memory = {
+            "last_seen_enemy": None,
+            "last_seen_time": 0.0,
+            "last_hit_time": 0.0,
+            "last_shot_time": 0.0,
+        }
+
+        self.sense_reg = Regulator(4)
+        self.think_reg = Regulator(2)
+
+        self.feeler_length = 40
+
+        self.brain = GoalThink(self)
+
+        self.dt = 0.0
+        self.bots_ref = None
+        self.bullets_ref = None
+        self.rockets_ref = None
+        self.obstacles_ref = None
+
     def has_line_of_sight(self, target, obstacles):
         x1, y1 = self.pos
         x2, y2 = target.pos
@@ -385,71 +509,55 @@ class dummybot:
                 return True
         return False
 
-    def follow_path(self, dt, bots):
+    def follow_path(self, dt, bots, obstacles):
         if not self.path or self.current_wp >= len(self.path):
             self.vel = Vector2(0, 0)
             return
+
         target = self.path[self.current_wp]
         to_target = target - self.pos
         dist = to_target.length()
+
+        # dotarcie do waypointa
         if dist < 1.0 or (self.vel.length_squared() > 0 and dist < self.vel.length() * dt * 1.5):
             self.pos = target
             self.current_wp += 1
             self.vel = Vector2(0, 0)
             self.collider.center = self.pos
             return
-        if self.is_position_blocked(target, bots):
-            offset = Vector2(random.uniform(-1, 1), random.uniform(-1, 1))
-            offset.scale_to_length(10)
-            self.pos += offset * dt
-            self.collider.center = self.pos
-            return
-        self.vel = to_target.normalize() * self.speed
-        self.pos += self.vel * dt
+
+        # ruch w stronę waypointa
+        move_dir = to_target.normalize()
+        next_pos = self.pos + move_dir * self.speed * dt
+
+        # pełny collider bota po ruchu
+        next_collider = pygame.Rect(
+            next_pos.x - self.radius,
+            next_pos.y - self.radius,
+            self.radius * 2,
+            self.radius * 2
+        )
+
+        # test kolizji z przeszkodami 
+        for r in obstacles:
+            if next_collider.colliderect(r.inflate(10, 10)):
+                self.current_wp += 1
+                self.vel = Vector2(0, 0)
+                return
+
+        # ruch jest bezpieczny to wykonujemy go
+        self.vel = move_dir * self.speed
+        self.pos = next_pos
         self.collider.center = self.pos
 
+        if self.current_wp >= len(self.path):
+            self.vel = Vector2(0, 0)
     def plan_to_target(self, target_pos):
         if self.planner is None:
             return
         path = []
         if self.planner.plan_path(target_pos, path):
             self.set_path(path)
-
-    def choose_state(self, bots, pickups):
-        if self.hp <= 0:
-            self.state = "dead"
-            self.target_enemy = None
-            return
-
-        closest_enemy = self.find_closest_enemy(bots)
-
-        low_hp = self.hp < 40
-        low_ammo = (self.ammo_rail + self.ammo_rocket) < 3
-
-        if low_hp or low_ammo:
-            best_pickup = self.find_best_pickup(pickups)
-            if best_pickup is not None:
-                self.state = "gather"
-                self.target_enemy = best_pickup
-                self.search_target_pos = None
-                return
-
-        if closest_enemy is not None and self.has_line_of_sight(closest_enemy, self.obstacles):
-            self.state = "fight"
-            self.target_enemy = closest_enemy
-            self.search_target_pos = None
-            self.path = []
-            self.current_wp = 0
-            return
-
-        if self.last_seen_enemy_pos is not None and self.time_since_enemy_seen < 6.0:
-            self.state = "search"
-            self.target_enemy = None
-            self.search_target_pos = Vector2(self.last_seen_enemy_pos)
-            return
-
-        self.state = "search"
-        self.target_enemy = None
 
     def find_closest_enemy(self, bots):
         best = None
@@ -473,35 +581,100 @@ class dummybot:
                 best = p
         return best
 
+    def sense(self, bots, obstacles):
+        closest_enemy = self.find_closest_enemy(bots)
+        if closest_enemy is not None and self.has_line_of_sight(closest_enemy, obstacles):
+            self.last_seen_enemy_pos = Vector2(closest_enemy.pos)
+            self.time_since_enemy_seen = 0.0
+            self.memory["last_seen_enemy"] = Vector2(closest_enemy.pos)
+            self.memory["last_seen_time"] = 0.0
+            dispatcher.dispatch(self, self, "ENEMY_SPOTTED", Vector2(closest_enemy.pos))
+
+    def handle_message(self, msg):
+        if msg.msg == "ENEMY_SPOTTED":
+            self.last_seen_enemy_pos = Vector2(msg.extra)
+            self.time_since_enemy_seen = 0.0
+            self.memory["last_seen_enemy"] = Vector2(msg.extra)
+            self.memory["last_seen_time"] = 0.0
+
+    def choose_state(self, bots, pickups, obstacles):
+        if self.hp <= 0:
+            self.state = "dead"
+            self.target_enemy = None
+            return
+
+        closest_enemy = self.find_closest_enemy(bots)
+
+        low_hp = self.hp < 40
+        low_ammo = (self.ammo_rail + self.ammo_rocket) < 3
+
+        if low_hp or low_ammo:
+            best_pickup = self.find_best_pickup(pickups)
+            if best_pickup is not None:
+                self.state = "gather"
+                self.target_enemy = best_pickup
+                self.search_target_pos = None
+                return
+
+        if closest_enemy is not None and self.has_line_of_sight(closest_enemy, obstacles):
+            self.state = "fight"
+            self.target_enemy = closest_enemy
+            self.search_target_pos = None
+            self.path = []
+            self.current_wp = 0
+            return
+
+        if self.last_seen_enemy_pos is not None and self.time_since_enemy_seen < 6.0:
+            self.state = "search"
+            self.target_enemy = None
+            self.search_target_pos = Vector2(self.last_seen_enemy_pos)
+            return
+
+        self.state = "search"
+        self.target_enemy = None
+        if self.search_target_pos is None:
+            self.search_target_pos = None
+
     def update_combat(self, dt, bots, bullets, rockets, obstacles):
         self.rail_cooldown = max(0.0, self.rail_cooldown - dt)
         self.rocket_cooldown = max(0.0, self.rocket_cooldown - dt)
+
         if self.target_enemy is None or self.target_enemy.hp <= 0:
             return
+
         if self.has_line_of_sight(self.target_enemy, obstacles):
             self.last_seen_enemy_pos = Vector2(self.target_enemy.pos)
             self.time_since_enemy_seen = 0.0
+            self.memory["last_seen_enemy"] = Vector2(self.target_enemy.pos)
+            self.memory["last_seen_time"] = 0.0
         else:
             if self.last_seen_enemy_pos is not None and self.time_since_enemy_seen < 6.0:
                 self.plan_to_target(self.last_seen_enemy_pos)
                 return
             return
+
         to_enemy = self.target_enemy.pos - self.pos
         dist = to_enemy.length()
         if dist < 1:
             return
+
         if dist < self.too_close_range:
             self.vel = -to_enemy.normalize() * self.speed * 0.7
             self.pos += self.vel * dt
             self.collider.center = self.pos
             return
+
         if dist > self.combat_range:
             self.plan_to_target(self.target_enemy.pos)
+            self.follow_path(dt, bots, obstacles)
             return
+
         self.vel = Vector2(0, 0)
         self.collider.center = self.pos
+
         if self.vel.length() > self.stop_shoot_speed:
             return
+
         if self.ammo_rail > 0 and self.rail_cooldown <= 0.0:
             spread = random.uniform(-0.08, 0.08)
             dir = to_enemy.normalize()
@@ -510,6 +683,7 @@ class dummybot:
             bullets.append(Bullet(self.pos, dir, speed=900, damage=25, owner=self))
             self.ammo_rail -= 1
             self.rail_cooldown = self.reload_time_rail
+            self.memory["last_shot_time"] = 0.0
         elif self.ammo_rocket > 0 and self.rocket_cooldown <= 0.0:
             spread = random.uniform(-0.15, 0.15)
             dir = to_enemy.normalize()
@@ -518,6 +692,7 @@ class dummybot:
             rockets.append(Rocket(self.pos, dir, owner=self))
             self.ammo_rocket -= 1
             self.rocket_cooldown = self.reload_time_rocket
+            self.memory["last_shot_time"] = 0.0
 
     def handle_pickups(self, pickups):
         for p in pickups[:]:
@@ -542,22 +717,54 @@ class dummybot:
                 self.pos += push
                 self.collider.center = self.pos
 
+    def feelers(self):
+        if self.vel.length_squared() == 0:
+            return []
+        forward = self.vel.normalize() * self.feeler_length
+        left = forward.rotate(45)
+        right = forward.rotate(-45)
+        return [
+            self.pos + forward,
+            self.pos + left,
+            self.pos + right
+        ]
+
     def update(self, dt, bots, obstacles, pickups, bullets, rockets, map_rect):
-        self.obstacles = obstacles
+        self.dt = dt
+        self.bots_ref = bots
+        self.bullets_ref = bullets
+        self.rockets_ref = rockets
+        self.obstacles_ref = obstacles
+
+        dispatcher.process()
+
+        print(f"[{self.state}] pos={self.pos} vel={self.vel} path_len={len(self.path)} wp={self.current_wp}")
+
         if self.hp <= 0:
             self.state = "dead"
             return
+
         self.time_since_enemy_seen += dt
         self.state_time += dt
+        self.memory["last_seen_time"] += dt
+        self.memory["last_shot_time"] += dt
+
+        if self.sense_reg.ready(dt):
+            self.sense(bots, obstacles)
+
         prev_state = self.state
-        self.choose_state(bots, pickups)
+        self.choose_state(bots, pickups, obstacles)
         if self.state != prev_state:
             self.state_time = 0.0
+
+        if self.think_reg.ready(dt):
+            self.brain.process()
+
         if self.state == "search":
             if self.search_target_pos is not None and self.time_since_enemy_seen < 6.0:
                 if not self.path or self.current_wp >= len(self.path):
                     self.plan_to_target(self.search_target_pos)
-                self.follow_path(dt, bots)
+                self.follow_path(dt, bots, obstacles)
             else:
                 if not self.path or self.current_wp >= len(self.path):
                     for _ in range(10):
@@ -568,21 +775,33 @@ class dummybot:
                         if (rand_pos - self.pos).length_squared() > 1000:
                             self.plan_to_target(rand_pos)
                             break
-                self.follow_path(dt, bots)
+                self.follow_path(dt, bots, obstacles)
             if self.state_time > 8.0:
                 self.path = []
                 self.current_wp = 0
                 self.search_target_pos = None
                 self.state_time = 0.0
+
         elif self.state == "gather":
             if isinstance(self.target_enemy, Pickup):
-                self.plan_to_target(self.target_enemy.pos)
-            self.follow_path(dt, bots)
+                if not self.path or self.current_wp >= len(self.path):
+                    self.plan_to_target(self.target_enemy.pos)
+            self.follow_path(dt, bots, obstacles)
+
         elif self.state == "fight":
             self.update_combat(dt, bots, bullets, rockets, obstacles)
+
+        for f in self.feelers():
+            for r in obstacles:
+                if r.collidepoint(f.x, f.y):
+                    self.pos -= self.vel * 0.1
+                    self.collider.center = self.pos
+
         self.apply_separation(bots)
+
         for r in obstacles:
             resolve_wall_penetration(self, [r])
+
         self.handle_pickups(pickups)
         self.collider.center = self.pos
 
@@ -590,8 +809,17 @@ class dummybot:
         if self.hp <= 0:
             return
         pygame.draw.circle(surface, (220, 60, 60), (int(self.pos.x), int(self.pos.y)), self.radius)
+
         if len(self.path) > 1:
             pygame.draw.lines(surface, (255, 200, 0), False, self.path, 2)
+            if self.current_wp < len(self.path):
+                wp = self.path[self.current_wp]
+                pygame.draw.circle(surface, (0, 0, 255), (int(wp.x), int(wp.y)), 4)
+
+        if self.vel.length_squared() > 0:
+            end = self.pos + self.vel.normalize() * 20
+            pygame.draw.line(surface, (0, 255, 255), self.pos, end, 2)
+
         hp_ratio = self.hp / self.max_hp
         bar_w = 30
         bar_h = 4

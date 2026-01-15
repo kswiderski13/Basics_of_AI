@@ -149,6 +149,7 @@ def main():
 
         for r in OBSTACLES:
             pygame.draw.rect(display, (60, 60, 60), r)
+            pygame.draw.rect(display, (255, 0, 0), r, 2)
 
         for poly in POLY_OBSTACLES:
             pygame.draw.polygon(display, (80, 80, 80), poly)
