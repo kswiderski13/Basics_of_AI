@@ -205,7 +205,7 @@ def can_place_bot(pos: Vector2, obstacles, poly_obstacles, map_rect: pygame.Rect
 
 def build_nav_graph_flood_fill(map_rect: pygame.Rect, bot_radius: float, obstacles, poly_obstacles):
     nodes: dict[tuple[int, int], NavigationNode] = {}
-    step = int(bot_radius * 2)
+    step = int(bot_radius * 1.5)
     
     for y in range(map_rect.top + int(bot_radius), map_rect.bottom - int(bot_radius), step):
         for x in range(map_rect.left + int(bot_radius), map_rect.right - int(bot_radius), step):
@@ -251,35 +251,48 @@ class PathPlanner:
             return False
         if start_node == end_node:
             return False
+
         open_set = []
         closed_set = set()
         came_from = {}
         g_score = {}
         f_score = {}
+
         for node in self.nav_graph.values():
             g_score[node] = float('inf')
             f_score[node] = float('inf')
+
         g_score[start_node] = 0
         f_score[start_node] = (start_node.position - end_node.position).length()
         open_set.append(start_node)
+
         while open_set:
             current = min(open_set, key=lambda node: f_score[node])
             if current == end_node:
                 self.reconstruct_path(came_from, current, path)
+                smoothed = self.smooth_path(path, self.owner.radius)
+                path.clear()
+                path.extend(smoothed)
                 return True
+
             open_set.remove(current)
             closed_set.add(current)
+
             for neighbor in current.neighbors:
                 if neighbor in closed_set:
                     continue
+
                 tentative_g_score = g_score[current] + (current.position - neighbor.position).length()
+
                 if neighbor not in open_set:
                     open_set.append(neighbor)
                 elif tentative_g_score >= g_score[neighbor]:
                     continue
+
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g_score
                 f_score[neighbor] = g_score[neighbor] + (neighbor.position - end_node.position).length()
+
         return False
 
     def reconstruct_path(self, came_from: dict, current: 'NavigationNode', path: list):
@@ -291,6 +304,42 @@ class PathPlanner:
         if total_path and (total_path[0] - self.owner.pos).length_squared() < 1.0:
             total_path.pop(0)
         path.extend(total_path)
+
+    def smooth_path(self, path, radius):
+        if len(path) <= 2:
+            return path[:]
+
+        smoothed = [path[0]]
+        i = 0
+
+        while i < len(path) - 1:
+            j = len(path) - 1
+            while j > i + 1:
+                if self.line_of_sight(path[i], path[j], radius):
+                    break
+                j -= 1
+            smoothed.append(path[j])
+            i = j
+
+        return smoothed
+
+    def line_of_sight(self, a: Vector2, b: Vector2, radius):
+        direction = b - a
+        dist = direction.length()
+        if dist == 0:
+            return True
+
+        direction = direction.normalize()
+        steps = int(dist / (radius * 0.5)) + 1
+
+        for s in range(steps):
+            p = a + direction * (s * radius * 0.5)
+            rect = pygame.Rect(p.x - radius, p.y - radius, radius * 2, radius * 2)
+            for r in self.owner.obstacles_ref:
+                if rect.colliderect(r.inflate(5, 5)):
+                    return False
+
+        return True
 
 
 class Pickup:
