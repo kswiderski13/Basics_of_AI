@@ -207,10 +207,36 @@ def can_place_bot(pos: Vector2, obstacles, poly_obstacles, map_rect: pygame.Rect
             return False
     return True
 
+def can_connect(a: Vector2, b: Vector2, radius: float, obstacles) -> bool:
+    direction = b - a
+    dist = direction.length()
+
+    if dist == 0:
+        return True
+
+    direction = direction.normalize()
+    step = radius * 0.5
+    steps = int(dist / step)
+
+    for i in range(steps + 1):
+        p = a + direction * (i * step)
+        rect = pygame.Rect(
+            p.x - radius,
+            p.y - radius,
+            radius * 2,
+            radius * 2
+        )
+
+        for r in obstacles:
+            if rect.colliderect(r):
+                return False
+
+    return True
+
 # Funkcja build_nav_graph_flood_fill tworzy graf nawigacyjny dla bota na podstawie mapy, promienia bota i przeszkód.
 def build_nav_graph_flood_fill(map_rect: pygame.Rect, bot_radius: float, obstacles, poly_obstacles):
     nodes: dict[tuple[int, int], NavigationNode] = {}
-    step = int(bot_radius * 2.5)
+    step = int(bot_radius * 1.5)
     
     for y in range(map_rect.top + int(bot_radius), map_rect.bottom - int(bot_radius), step):
         for x in range(map_rect.left + int(bot_radius), map_rect.right - int(bot_radius), step):
@@ -221,7 +247,8 @@ def build_nav_graph_flood_fill(map_rect: pygame.Rect, bot_radius: float, obstacl
         for dx, dy in [(step, 0), (-step, 0), (0, step), (0, -step)]:
             nx, ny = x + dx, y + dy
             if (nx, ny) in nodes:
-                node.neighbors.append(nodes[(nx, ny)])
+                if can_connect(node.position, nodes[(nx, ny)].position, bot_radius, obstacles):
+                    node.neighbors.append(nodes[(nx, ny)])
     return nodes
 
 # Funkcja draw_nav_graph rysuje graf nawigacyjny na podanej powierzchni.
@@ -501,7 +528,7 @@ class dummybot:
         self.pos = Vector2(pos)
         self.vel = Vector2(0, 0)
         self.speed = 120
-        self.radius = 15
+        self.radius = 5
         self.collider = pygame.Rect(self.pos.x - self.radius, self.pos.y - self.radius,
                                     self.radius * 2, self.radius * 2)
         self.path = []
@@ -601,7 +628,7 @@ class dummybot:
         # test kolizji z przeszkodami 
         for r in obstacles:
             if next_collider.colliderect(r.inflate(10, 10)):
-                #self.current_wp += 1
+                self.current_wp += 1
                 self.vel = Vector2(0, 0)
                 return
 
