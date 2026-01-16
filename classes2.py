@@ -210,7 +210,7 @@ def can_place_bot(pos: Vector2, obstacles, poly_obstacles, map_rect: pygame.Rect
 # Funkcja build_nav_graph_flood_fill tworzy graf nawigacyjny dla bota na podstawie mapy, promienia bota i przeszkód.
 def build_nav_graph_flood_fill(map_rect: pygame.Rect, bot_radius: float, obstacles, poly_obstacles):
     nodes: dict[tuple[int, int], NavigationNode] = {}
-    step = int(bot_radius * 1.5)
+    step = int(bot_radius * 2.5)
     
     for y in range(map_rect.top + int(bot_radius), map_rect.bottom - int(bot_radius), step):
         for x in range(map_rect.left + int(bot_radius), map_rect.right - int(bot_radius), step):
@@ -525,6 +525,8 @@ class dummybot:
         self.time_since_enemy_seen = 0.0
         self.state_time = 0.0
         self.search_target_pos = None
+        self.stuck_time = 0.0
+        self.last_pos = Vector2(self.pos)
 
         self.memory = {
             "last_seen_enemy": None,
@@ -599,7 +601,7 @@ class dummybot:
         # test kolizji z przeszkodami 
         for r in obstacles:
             if next_collider.colliderect(r.inflate(10, 10)):
-                self.current_wp += 1
+                #self.current_wp += 1
                 self.vel = Vector2(0, 0)
                 return
 
@@ -862,6 +864,17 @@ class dummybot:
 
         self.handle_pickups(pickups)
         self.collider.center = self.pos
+
+        if (self.pos -self.last_pos).length_squared() < 1:
+            self.stuck_time += dt
+        else:
+            self.stuck_time = 0
+
+        if self.stuck_time > 1.0:
+            self.path = []
+            self.current_wp = 0
+            self.stuck_time = 0
+
 
     def draw(self, surface):
         if self.hp <= 0:
