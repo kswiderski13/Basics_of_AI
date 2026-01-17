@@ -47,6 +47,7 @@ def resolve_wall_penetration(entity, walls):
             if abs(dy) > 0:
                 v.y = 0
             entity.vel = v * 0.1
+            entity.hit_wall = True
             if hasattr(entity, '_stuck_timer'):
                 entity._stuck_timer = 0.0
 
@@ -370,7 +371,7 @@ class PathPlanner:
             p = a + direction * (s * radius * 0.5)
             rect = pygame.Rect(p.x - radius, p.y - radius, radius * 2, radius * 2)
             for r in self.owner.obstacles_ref:
-                if rect.colliderect(r.inflate(5, 5)):
+                if rect.colliderect(r.inflate(radius * 2, radius * 2)):
                     return False
 
         return True
@@ -628,7 +629,9 @@ class dummybot:
         # test kolizji z przeszkodami 
         for r in obstacles:
             if next_collider.colliderect(r.inflate(10, 10)):
-                self.current_wp += 1
+                self.path = []
+                #self.current_wp += 1
+                self.current_wp = 0
                 self.vel = Vector2(0, 0)
                 return
 
@@ -825,6 +828,11 @@ class dummybot:
 
         dispatcher.process()
 
+        if getattr(self, "_hit_wall", False):
+            self.path = []
+            self.current_wp = 0
+            self._hit_wall = False
+
         print(f"[{self.state}] pos={self.pos} vel={self.vel} path_len={len(self.path)} wp={self.current_wp}")
 
         if self.hp <= 0:
@@ -881,7 +889,8 @@ class dummybot:
         for f in self.feelers():
             for r in obstacles:
                 if r.collidepoint(f.x, f.y):
-                    self.pos -= self.vel * 0.1
+                    self.vel = self.vel.rotate(random.choice([-90, 90]))
+                    self.pos += self.vel.normalize() * 5
                     self.collider.center = self.pos
 
         self.apply_separation(bots)
@@ -900,6 +909,8 @@ class dummybot:
         if self.stuck_time > 1.0:
             self.path = []
             self.current_wp = 0
+            escape = self.pos + Vector2(random.choice([-60, 60]), random.choice([-60, 60]))
+            self.plan_to_target(escape)
             self.stuck_time = 0
 
 
